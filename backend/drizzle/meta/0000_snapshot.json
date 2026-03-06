@@ -1,0 +1,50 @@
+{
+  "id": "9d4c676e-8963-48cd-aa15-9588d5c2767b",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.prices": {
+      "name": "prices",
+      "schema": "",
+      "columns": {
+        "datetime": {
+          "name": "datetime",
+          "type": "timestamp with time zone",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "price_no_tax": {
+          "name": "price_no_tax",
+          "type": "numeric(10, 5)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "price_with_tax": {
+          "name": "price_with_tax",
+          "type": "numeric(10, 5)",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}
