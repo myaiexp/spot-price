@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pörssisähkö — mase.fi</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation"></script>
+  <style>
+    :root {
+      --bg: #09090b;
+      --bg-card: #18181c;
+      --bg-card-hover: #1f1f24;
+      --accent: #e8a308;
+      --accent-glow: rgba(232, 163, 8, 0.12);
+      --text: #fafafa;
+      --text-secondary: #a1a1aa;
+      --text-muted: #52525b;
+      --border: #27272a;
+      --border-hover: #3f3f46;
+      --font-display: 'Bricolage Grotesque', sans-serif;
+      --font-body: 'DM Sans', sans-serif;
+      --card-radius: 12px;
+    }
+
+    *, *::before, *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: var(--font-body);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      position: relative;
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      background:
+        radial-gradient(ellipse 80% 60% at 20% 10%, rgba(232, 163, 8, 0.04) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 80% at 80% 30%, rgba(6, 182, 212, 0.03) 0%, transparent 60%),
+        radial-gradient(ellipse 70% 50% at 50% 90%, rgba(139, 92, 246, 0.03) 0%, transparent 60%);
+    }
+
+    .container {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 24px 16px 48px;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+    }
+
+    .header h1 {
+      font-family: var(--font-display);
+      font-weight: 800;
+      font-size: 1.6rem;
+      letter-spacing: -0.02em;
+    }
+
+    .header a {
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+
+    .header a:hover {
+      color: var(--accent);
+    }
+
+    /* Cards */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--card-radius);
+      padding: 20px 24px;
+      transition: border-color 0.2s;
+    }
+
+    .card:hover {
+      border-color: var(--border-hover);
+    }
+
+    /* Hero Card */
+    .hero-card {
+      margin-bottom: 20px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero-card__tint {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      border-radius: var(--card-radius);
+      transition: background 0.3s;
+    }
+
+    .hero-card__content {
+      position: relative;
+      z-index: 1;
+    }
+
+    .hero-card__label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 8px;
+    }
+
+    .hero-card__price {
+      font-family: var(--font-display);
+      font-weight: 800;
+      font-size: 2.8rem;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+    }
+
+    .hero-card__price span {
+      font-size: 1.2rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-left: 4px;
+    }
+
+    .hero-card__context {
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+      margin-top: 8px;
+    }
+
+    .hero-card__yesterday {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .hero-card__loading {
+      font-size: 1rem;
+      color: var(--text-muted);
+    }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      gap: 0;
+      margin-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .tab-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-family: var(--font-body);
+      font-size: 0.9rem;
+      font-weight: 600;
+      padding: 10px 20px;
+      cursor: pointer;
+      position: relative;
+      transition: color 0.2s;
+    }
+
+    .tab-btn:hover {
+      color: var(--text-secondary);
+    }
+
+    .tab-btn.active {
+      color: var(--accent);
+    }
+
+    .tab-btn.active::after {
+      content: '';
+      position: absolute;
+      bottom: -1px;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: var(--accent);
+      border-radius: 1px 1px 0 0;
+    }
+
+    .tab-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    /* Chart Container */
+    .chart-container {
+      margin-bottom: 20px;
+      padding: 16px 16px 12px;
+    }
+
+    .chart-container canvas {
+      width: 100% !important;
+      height: 260px !important;
+    }
+
+    .chart-placeholder {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 260px;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+    }
+
+    /* Insights Grid */
+    .insights {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 32px;
+    }
+
+    .insight-card {
+      padding: 16px;
+    }
+
+    .insight-card__icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1rem;
+      margin-bottom: 10px;
+    }
+
+    .insight-card__icon--green {
+      background: rgba(34, 197, 94, 0.12);
+      color: #22c55e;
+    }
+
+    .insight-card__icon--amber {
+      background: rgba(232, 163, 8, 0.12);
+      color: #e8a308;
+    }
+
+    .insight-card__icon--red {
+      background: rgba(239, 68, 68, 0.12);
+      color: #ef4444;
+    }
+
+    .insight-card__title {
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+    }
+
+    .insight-card__value {
+      font-family: var(--font-display);
+      font-weight: 800;
+      font-size: 1.05rem;
+      margin-bottom: 2px;
+    }
+
+    .insight-card__detail {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+
+    /* Footer */
+    .footer {
+      text-align: center;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      padding: 16px 0;
+    }
+
+    /* Error State */
+    .error-msg {
+      text-align: center;
+      color: #ef4444;
+      font-size: 0.9rem;
+      padding: 16px;
+    }
+
+    /* Responsive */
+    @media (max-width: 640px) {
+      .container {
+        padding: 16px 12px 40px;
+      }
+
+      .hero-card__price {
+        font-size: 2.2rem;
+      }
+
+      .insights {
+        grid-template-columns: 1fr;
+      }
+
+      .chart-container canvas {
+        height: 220px !important;
+      }
+    }
+
+    /* Reduced motion */
+    @media (prefers-reduced-motion: reduce) {
+      * {
+        transition-duration: 0s !important;
+        animation-duration: 0s !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header class="header">
+      <h1>Pörssisähkö</h1>
+      <a href="/">← mase.fi</a>
+    </header>
+
+    <!-- Hero Card -->
+    <div class="hero-card card" id="heroCard">
+      <div class="hero-card__tint" id="heroTint"></div>
+      <div class="hero-card__content">
+        <div class="hero-card__label">Hinta nyt</div>
+        <div id="heroPrice" class="hero-card__loading">Ladataan...</div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="today" id="tabToday">Tänään</button>
+      <button class="tab-btn" data-tab="tomorrow" id="tabTomorrow">Huomenna</button>
+    </div>
+
+    <!-- Chart -->
+    <div class="chart-container card" id="chartContainer">
+      <div class="chart-placeholder" id="chartPlaceholder">Ladataan...</div>
+      <canvas id="priceChart" style="display:none;"></canvas>
+    </div>
+
+    <!-- Insights -->
+    <div class="insights" id="insightsGrid">
+      <div class="insight-card card">
+        <div class="insight-card__icon insight-card__icon--green">⚡</div>
+        <div class="insight-card__title">Halvin 2h jakso</div>
+        <div class="insight-card__value" id="insightCheapValue">—</div>
+        <div class="insight-card__detail" id="insightCheapDetail">Ladataan...</div>
+      </div>
+      <div class="insight-card card">
+        <div class="insight-card__icon insight-card__icon--amber">⏱</div>
+        <div class="insight-card__title">Seuraava halpa hetki</div>
+        <div class="insight-card__value" id="insightNextValue">—</div>
+        <div class="insight-card__detail" id="insightNextDetail">Ladataan...</div>
+      </div>
+      <div class="insight-card card">
+        <div class="insight-card__icon insight-card__icon--red">🔺</div>
+        <div class="insight-card__title">Kalliimpaa, vältä</div>
+        <div class="insight-card__value" id="insightPeakValue">—</div>
+        <div class="insight-card__detail" id="insightPeakDetail">Ladataan...</div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+      Tiedot: spot-hinta.fi • Päivitetään 15 min välein
+    </footer>
+  </div>
+
+  <script>
+    const API_BASE = '/porssi/api';
+
+    // ─── State ───────────────────────────────────────────────────────
+    let state = {
+      today: null,
+      yesterday: null,
+      tomorrow: null,
+      now: null,
+      activeTab: 'today',
+      chart: null,
+    };
+
+    // ─── API ─────────────────────────────────────────────────────────
+    async function fetchJSON(path) {
+      const res = await fetch(`${API_BASE}${path}`);
+      if (!res.ok) {
+        if (res.status === 404) return null;
+        throw new Error(`API ${res.status}: ${res.statusText}`);
+      }
+      return res.json();
+    }
+
+    async function loadAllData() {
+      try {
+        const [today, yesterday, tomorrow, now] = await Promise.all([
+          fetchJSON('/prices/today'),
+          fetchJSON('/prices/yesterday'),
+          fetchJSON('/prices/tomorrow').catch(() => null),
+          fetchJSON('/prices/now'),
+        ]);
+        state.today = today;
+        state.yesterday = yesterday;
+        state.tomorrow = tomorrow;
+        state.now = now;
+
+        updateTomorrowTab();
+        renderHero();
+        renderChart();
+        renderInsights();
+      } catch (err) {
+        console.error('Failed to load data:', err);
+        showError('Tietojen lataus epäonnistui. Yritä myöhemmin uudelleen.');
+      }
+    }
+
+    function showError(msg) {
+      document.getElementById('heroPrice').innerHTML =
+        `<div class="error-msg">${msg}</div>`;
+    }
+
+    // ─── Helpers ─────────────────────────────────────────────────────
+    function eurToCents(eur) {
+      return (eur * 100).toFixed(2);
+    }
+
+    function formatTime(isoString) {
+      const d = new Date(isoString);
+      return d.toLocaleTimeString('fi-FI', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function slotIndexToTime(index) {
+      const h = Math.floor(index / 4);
+      const m = (index % 4) * 15;
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    }
+
+    function getCurrentQuarterIndex() {
+      const now = new Date();
+      return now.getHours() * 4 + Math.floor(now.getMinutes() / 15);
+    }
+
+    // ─── Hero Card ───────────────────────────────────────────────────
+    function renderHero() {
+      const container = document.getElementById('heroPrice');
+      const tint = document.getElementById('heroTint');
+
+      if (!state.now || !state.now.slot) {
+        container.innerHTML = '<div class="hero-card__loading">Ei hintatietoja saatavilla</div>';
+        return;
+      }
+
+      const priceCents = eurToCents(state.now.slot.priceWithTax);
+      const percentile = state.now.percentile;
+
+      // Color tint based on percentile
+      let tintColor;
+      if (percentile >= 70) {
+        tintColor = 'rgba(34, 197, 94, 0.08)';
+      } else if (percentile >= 30) {
+        tintColor = 'rgba(232, 163, 8, 0.08)';
+      } else {
+        tintColor = 'rgba(239, 68, 68, 0.08)';
+      }
+      tint.style.background = tintColor;
+
+      let html = `
+        <div class="hero-card__price">${priceCents}<span>c/kWh</span></div>
+        <div class="hero-card__context">Halvempi kuin ${percentile}% tänään</div>
+      `;
+
+      if (state.now.yesterdaySlot) {
+        const yPrice = eurToCents(state.now.yesterdaySlot.priceWithTax);
+        html += `<div class="hero-card__yesterday">Eilen samaan aikaan: ${yPrice} c/kWh</div>`;
+      }
+
+      container.innerHTML = html;
+    }
+
+    // ─── Tabs ────────────────────────────────────────────────────────
+    function updateTomorrowTab() {
+      const btn = document.getElementById('tabTomorrow');
+      if (!state.tomorrow || !state.tomorrow.slots || state.tomorrow.slots.length === 0) {
+        btn.disabled = true;
+        btn.title = 'Huomisen hintoja ei vielä saatavilla';
+      } else {
+        btn.disabled = false;
+        btn.title = '';
+      }
+    }
+
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (btn.disabled) return;
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        state.activeTab = btn.dataset.tab;
+        renderChart();
+        renderInsights();
+      });
+    });
+
+    // ─── Chart ───────────────────────────────────────────────────────
+    function buildGradient(ctx, chartArea) {
+      if (!chartArea) return 'rgba(232, 163, 8, 0.3)';
+      const gradient = ctx.createLinearGradient(0, chartArea.bottom, 0, chartArea.top);
+      gradient.addColorStop(0, 'rgba(34, 197, 94, 0.35)');
+      gradient.addColorStop(0.5, 'rgba(232, 163, 8, 0.25)');
+      gradient.addColorStop(1, 'rgba(239, 68, 68, 0.3)');
+      return gradient;
+    }
+
+    function renderChart() {
+      const canvas = document.getElementById('priceChart');
+      const placeholder = document.getElementById('chartPlaceholder');
+
+      const isToday = state.activeTab === 'today';
+      const primary = isToday ? state.today : state.tomorrow;
+      const secondary = isToday ? state.yesterday : state.today;
+
+      if (!primary || !primary.slots || primary.slots.length === 0) {
+        canvas.style.display = 'none';
+        placeholder.style.display = 'flex';
+        placeholder.textContent = 'Ei hintatietoja saatavilla';
+        return;
+      }
+
+      canvas.style.display = 'block';
+      placeholder.style.display = 'none';
+
+      const labels = primary.slots.map((_, i) => slotIndexToTime(i));
+      const primaryData = primary.slots.map(s => parseFloat(eurToCents(s.priceWithTax)));
+      const secondaryData = secondary && secondary.slots
+        ? secondary.slots.map(s => parseFloat(eurToCents(s.priceWithTax)))
+        : [];
+
+      const secondaryLabel = isToday ? 'Eilen' : 'Tänään';
+      const primaryLabel = isToday ? 'Tänään' : 'Huomenna';
+
+      const nowIndex = getCurrentQuarterIndex();
+
+      const datasets = [
+        {
+          label: primaryLabel,
+          data: primaryData,
+          borderColor: 'rgba(232, 163, 8, 1)',
+          borderWidth: 2,
+          fill: true,
+          backgroundColor: function(context) {
+            const chart = context.chart;
+            const { ctx, chartArea } = chart;
+            return buildGradient(ctx, chartArea);
+          },
+          pointRadius: 0,
+          pointHoverRadius: 5,
+          pointHoverBackgroundColor: 'rgba(232, 163, 8, 1)',
+          pointHoverBorderColor: '#fff',
+          pointHoverBorderWidth: 2,
+          tension: 0.3,
+          order: 1,
+        },
+      ];
+
+      if (secondaryData.length > 0) {
+        datasets.push({
+          label: secondaryLabel,
+          data: secondaryData,
+          borderColor: 'rgba(161, 161, 170, 0.3)',
+          borderWidth: 1.5,
+          borderDash: [5, 5],
+          fill: false,
+          pointRadius: 0,
+          pointHoverRadius: 0,
+          tension: 0.3,
+          order: 2,
+        });
+      }
+
+      // Annotation for "now" marker (only on today tab)
+      const annotations = {};
+      if (isToday) {
+        annotations.nowLine = {
+          type: 'line',
+          xMin: nowIndex,
+          xMax: nowIndex,
+          borderColor: 'rgba(232, 163, 8, 0.5)',
+          borderWidth: 1.5,
+          borderDash: [4, 4],
+          label: {
+            display: true,
+            content: 'Nyt',
+            position: 'start',
+            backgroundColor: 'rgba(232, 163, 8, 0.9)',
+            color: '#09090b',
+            font: { size: 11, weight: '600', family: 'DM Sans' },
+            padding: { x: 6, y: 3 },
+            borderRadius: 4,
+          },
+        };
+      }
+
+      const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      const config = {
+        type: 'line',
+        data: { labels, datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: reducedMotion ? false : { duration: 600 },
+          interaction: {
+            mode: 'index',
+            intersect: false,
+          },
+          scales: {
+            x: {
+              grid: {
+                color: 'rgba(255, 255, 255, 0.05)',
+              },
+              ticks: {
+                color: '#52525b',
+                font: { size: 11, family: 'DM Sans' },
+                maxRotation: 0,
+                callback: function(value, index) {
+                  // Show only :00 labels
+                  if (index % 4 === 0) return this.getLabelForValue(value);
+                  return '';
+                },
+                autoSkip: false,
+              },
+              border: { display: false },
+            },
+            y: {
+              beginAtZero: true,
+              grid: {
+                color: 'rgba(255, 255, 255, 0.05)',
+              },
+              ticks: {
+                color: '#52525b',
+                font: { size: 11, family: 'DM Sans' },
+                callback: function(value) {
+                  return value + ' c';
+                },
+              },
+              border: { display: false },
+            },
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: '#18181c',
+              titleColor: '#fafafa',
+              bodyColor: '#a1a1aa',
+              borderColor: '#27272a',
+              borderWidth: 1,
+              cornerRadius: 8,
+              padding: 10,
+              titleFont: { family: 'DM Sans', weight: '600' },
+              bodyFont: { family: 'DM Sans' },
+              callbacks: {
+                title: function(items) {
+                  return items[0].label;
+                },
+                label: function(context) {
+                  return `${context.dataset.label}: ${context.parsed.y.toFixed(2)} c/kWh`;
+                },
+              },
+            },
+            annotation: {
+              annotations: annotations,
+            },
+          },
+        },
+      };
+
+      if (state.chart) {
+        state.chart.destroy();
+      }
+      state.chart = new Chart(canvas, config);
+    }
+
+    // ─── Insights ────────────────────────────────────────────────────
+    function findCheapestBlock(slots, blockSize = 8) {
+      if (!slots || slots.length < blockSize) return null;
+
+      let bestSum = Infinity;
+      let bestStart = 0;
+
+      for (let i = 0; i <= slots.length - blockSize; i++) {
+        let sum = 0;
+        for (let j = i; j < i + blockSize; j++) {
+          sum += slots[j].priceWithTax;
+        }
+        if (sum < bestSum) {
+          bestSum = sum;
+          bestStart = i;
+        }
+      }
+
+      return {
+        startIndex: bestStart,
+        endIndex: bestStart + blockSize - 1,
+        avgPrice: bestSum / blockSize,
+      };
+    }
+
+    function findNextCheapWindow(slots, currentIndex) {
+      if (!slots || slots.length === 0) return null;
+
+      // Determine threshold: cheapest third of all slots
+      const prices = slots.map(s => s.priceWithTax).sort((a, b) => a - b);
+      const threshold = prices[Math.floor(prices.length / 3)];
+
+      // Check if currently in a cheap slot
+      if (currentIndex < slots.length && slots[currentIndex].priceWithTax <= threshold) {
+        // Find when this cheap window ends
+        let endIdx = currentIndex;
+        while (endIdx < slots.length && slots[endIdx].priceWithTax <= threshold) {
+          endIdx++;
+        }
+        return { inCheapNow: true, endsAt: endIdx };
+      }
+
+      // Find next cheap slot from current index forward
+      for (let i = currentIndex + 1; i < slots.length; i++) {
+        if (slots[i].priceWithTax <= threshold) {
+          const minutesAway = (i - currentIndex) * 15;
+          return {
+            inCheapNow: false,
+            startIndex: i,
+            startsIn: minutesAway,
+            price: slots[i].priceWithTax,
+          };
+        }
+      }
+
+      return null;
+    }
+
+    function findPeakBlock(slots) {
+      if (!slots || slots.length === 0) return null;
+
+      // Determine threshold: expensive third
+      const prices = slots.map(s => s.priceWithTax).sort((a, b) => a - b);
+      const threshold = prices[Math.floor(prices.length * 2 / 3)];
+
+      let bestStart = -1;
+      let bestLen = 0;
+      let curStart = -1;
+      let curLen = 0;
+
+      for (let i = 0; i < slots.length; i++) {
+        if (slots[i].priceWithTax >= threshold) {
+          if (curStart === -1) curStart = i;
+          curLen++;
+          if (curLen > bestLen) {
+            bestLen = curLen;
+            bestStart = curStart;
+          }
+        } else {
+          curStart = -1;
+          curLen = 0;
+        }
+      }
+
+      if (bestStart === -1) return null;
+
+      let sum = 0;
+      for (let i = bestStart; i < bestStart + bestLen; i++) {
+        sum += slots[i].priceWithTax;
+      }
+
+      return {
+        startIndex: bestStart,
+        endIndex: bestStart + bestLen - 1,
+        avgPrice: sum / bestLen,
+      };
+    }
+
+    function renderInsights() {
+      const isToday = state.activeTab === 'today';
+      const data = isToday ? state.today : state.tomorrow;
+
+      if (!data || !data.slots || data.slots.length === 0) {
+        document.getElementById('insightCheapValue').textContent = '—';
+        document.getElementById('insightCheapDetail').textContent = 'Ei tietoja';
+        document.getElementById('insightNextValue').textContent = '—';
+        document.getElementById('insightNextDetail').textContent = 'Ei tietoja';
+        document.getElementById('insightPeakValue').textContent = '—';
+        document.getElementById('insightPeakDetail').textContent = 'Ei tietoja';
+        return;
+      }
+
+      const slots = data.slots;
+      const currentIdx = isToday ? getCurrentQuarterIndex() : 0;
+
+      // Cheapest 2h block
+      const cheap = findCheapestBlock(slots);
+      if (cheap) {
+        const startTime = slotIndexToTime(cheap.startIndex);
+        const endTime = slotIndexToTime(cheap.endIndex + 1);
+        document.getElementById('insightCheapValue').textContent =
+          `${startTime}–${endTime}`;
+        document.getElementById('insightCheapDetail').textContent =
+          `Keskihinta ${eurToCents(cheap.avgPrice)} c/kWh`;
+      }
+
+      // Next cheap window
+      const next = findNextCheapWindow(slots, currentIdx);
+      if (next) {
+        if (next.inCheapNow) {
+          document.getElementById('insightNextValue').textContent = 'Nyt!';
+          document.getElementById('insightNextDetail').textContent =
+            `Olet halvassa jaksossa (→ ${slotIndexToTime(next.endsAt)})`;
+        } else {
+          if (next.startsIn >= 60) {
+            const h = Math.floor(next.startsIn / 60);
+            const m = next.startsIn % 60;
+            const timeStr = m > 0 ? `${h}h ${m}min` : `${h}h`;
+            document.getElementById('insightNextValue').textContent = timeStr;
+          } else {
+            document.getElementById('insightNextValue').textContent = `${next.startsIn} min`;
+          }
+          document.getElementById('insightNextDetail').textContent =
+            `Alkaa ${slotIndexToTime(next.startIndex)} (${eurToCents(next.price)} c/kWh)`;
+        }
+      } else {
+        document.getElementById('insightNextValue').textContent = '—';
+        document.getElementById('insightNextDetail').textContent =
+          isToday ? 'Ei halpaa jaksoa jäljellä' : 'Ei tietoja';
+      }
+
+      // Peak to avoid
+      const peak = findPeakBlock(slots);
+      if (peak) {
+        const startTime = slotIndexToTime(peak.startIndex);
+        const endTime = slotIndexToTime(peak.endIndex + 1);
+        document.getElementById('insightPeakValue').textContent =
+          `${startTime}–${endTime}`;
+        document.getElementById('insightPeakDetail').textContent =
+          `Keskihinta ${eurToCents(peak.avgPrice)} c/kWh`;
+      }
+    }
+
+    // ─── Auto-refresh ────────────────────────────────────────────────
+    let lastQuarterIndex = getCurrentQuarterIndex();
+
+    setInterval(() => {
+      const now = getCurrentQuarterIndex();
+      if (now !== lastQuarterIndex) {
+        lastQuarterIndex = now;
+        refreshData();
+      }
+    }, 60000);
+
+    function refreshData() {
+      loadAllData();
+    }
+
+    // ─── Init ────────────────────────────────────────────────────────
+    loadAllData();
+  </script>
+</body>
+</html>
