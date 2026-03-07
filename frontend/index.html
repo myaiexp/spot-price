@@ -301,6 +301,43 @@
       padding: 16px;
     }
 
+    /* Chart Controls */
+    .chart-controls {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .toggle-group {
+      display: flex;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .toggle-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-family: var(--font-body);
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 6px 14px;
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s;
+      height: 32px;
+    }
+
+    .toggle-btn:hover {
+      color: var(--text-secondary);
+    }
+
+    .toggle-btn.active {
+      background: var(--accent);
+      color: #09090b;
+    }
+
     /* Responsive */
     @media (max-width: 640px) {
       .container {
@@ -352,6 +389,18 @@
       <button class="tab-btn" data-tab="tomorrow" id="tabTomorrow">Huomenna</button>
     </div>
 
+    <!-- Chart Controls -->
+    <div class="chart-controls">
+      <div class="toggle-group" id="chartTypeToggle">
+        <button class="toggle-btn active" data-value="area">Area</button>
+        <button class="toggle-btn" data-value="bar">Bar</button>
+      </div>
+      <div class="toggle-group" id="resolutionToggle">
+        <button class="toggle-btn active" data-value="15min">15 min</button>
+        <button class="toggle-btn" data-value="hourly">Tunnit</button>
+      </div>
+    </div>
+
     <!-- Chart -->
     <div class="chart-container card" id="chartContainer">
       <div class="chart-placeholder" id="chartPlaceholder">Ladataan...</div>
@@ -396,6 +445,8 @@
       tomorrow: null,
       now: null,
       activeTab: 'today',
+      chartType: 'area',
+      resolution: '15min',
       chart: null,
     };
 
@@ -458,6 +509,30 @@
       return now.getHours() * 4 + Math.floor(now.getMinutes() / 15);
     }
 
+    // ─── EMA Aggregation ─────────────────────────────────────────────
+    function emaAggregate(slots, alpha = 0.3) {
+      const hourly = [];
+      for (let h = 0; h < 24; h++) {
+        const quarter = slots.slice(h * 4, h * 4 + 4);
+        if (quarter.length === 0) continue;
+        // EMA across the 4 quarter-slots (chronological, so :45 weighted most)
+        let ema = quarter[0].priceWithTax;
+        for (let i = 1; i < quarter.length; i++) {
+          ema = alpha * quarter[i].priceWithTax + (1 - alpha) * ema;
+        }
+        let emaNoTax = quarter[0].priceNoTax;
+        for (let i = 1; i < quarter.length; i++) {
+          emaNoTax = alpha * quarter[i].priceNoTax + (1 - alpha) * emaNoTax;
+        }
+        hourly.push({
+          datetime: quarter[0].datetime,
+          priceNoTax: emaNoTax,
+          priceWithTax: ema,
+        });
+      }
+      return hourly;
+    }
+
     // ─── Hero Card ───────────────────────────────────────────────────
     function renderHero() {
       const container = document.getElementById('heroPrice');
@@ -518,6 +593,25 @@
       });
     });
 
+    // ─── Chart Controls ──────────────────────────────────────────────
+    document.querySelectorAll('#chartTypeToggle .toggle-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#chartTypeToggle .toggle-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        state.chartType = btn.dataset.value;
+        renderChart();
+      });
+    });
+
+    document.querySelectorAll('#resolutionToggle .toggle-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#resolutionToggle .toggle-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        state.resolution = btn.dataset.value;
+        renderChart();
+      });
+    });
+
     // ─── Chart ───────────────────────────────────────────────────────
     function buildGradient(ctx, chartArea) {
       if (!chartArea) return 'rgba(232, 163, 8, 0.3)';
@@ -546,38 +640,58 @@
       canvas.style.display = 'block';
       placeholder.style.display = 'none';
 
-      const labels = primary.slots.map((_, i) => slotIndexToTime(i));
-      const primaryData = primary.slots.map(s => parseFloat(eurToCents(s.priceWithTax)));
-      const secondaryData = secondary && secondary.slots
-        ? secondary.slots.map(s => parseFloat(eurToCents(s.priceWithTax)))
-        : [];
+      const isHourly = state.resolution === 'hourly';
+      const isBar = state.chartType === 'bar';
+
+      // Apply resolution
+      let primarySlots = primary.slots;
+      let secondarySlots = secondary && secondary.slots ? secondary.slots : [];
+      if (isHourly) {
+        primarySlots = emaAggregate(primarySlots);
+        if (secondarySlots.length > 0) secondarySlots = emaAggregate(secondarySlots);
+      }
+
+      const labels = isHourly
+        ? primarySlots.map((_, i) => `${String(i).padStart(2, '0')}:00`)
+        : primarySlots.map((_, i) => slotIndexToTime(i));
+      const primaryData = primarySlots.map(s => parseFloat(eurToCents(s.priceWithTax)));
+      const secondaryData = secondarySlots.map(s => parseFloat(eurToCents(s.priceWithTax)));
 
       const secondaryLabel = isToday ? 'Eilen' : 'Tänään';
       const primaryLabel = isToday ? 'Tänään' : 'Huomenna';
 
-      const nowIndex = getCurrentQuarterIndex();
+      const nowIndex = isHourly
+        ? new Date().getHours()
+        : getCurrentQuarterIndex();
 
-      const datasets = [
-        {
-          label: primaryLabel,
-          data: primaryData,
-          borderColor: 'rgba(232, 163, 8, 1)',
-          borderWidth: 2,
-          fill: true,
-          backgroundColor: function(context) {
-            const chart = context.chart;
-            const { ctx, chartArea } = chart;
-            return buildGradient(ctx, chartArea);
-          },
-          pointRadius: 0,
-          pointHoverRadius: 5,
-          pointHoverBackgroundColor: 'rgba(232, 163, 8, 1)',
-          pointHoverBorderColor: '#fff',
-          pointHoverBorderWidth: 2,
-          tension: 0.3,
-          order: 1,
-        },
-      ];
+      const primaryDataset = {
+        label: primaryLabel,
+        data: primaryData,
+        borderColor: 'rgba(232, 163, 8, 1)',
+        borderWidth: isBar ? 0 : 2,
+        fill: !isBar,
+        backgroundColor: isBar
+          ? function(context) {
+              const chart = context.chart;
+              const { ctx, chartArea } = chart;
+              return buildGradient(ctx, chartArea);
+            }
+          : function(context) {
+              const chart = context.chart;
+              const { ctx, chartArea } = chart;
+              return buildGradient(ctx, chartArea);
+            },
+        pointRadius: 0,
+        pointHoverRadius: isBar ? 0 : 5,
+        pointHoverBackgroundColor: 'rgba(232, 163, 8, 1)',
+        pointHoverBorderColor: '#fff',
+        pointHoverBorderWidth: 2,
+        tension: isBar ? 0 : 0.3,
+        order: 1,
+        borderRadius: isBar ? 4 : 0,
+      };
+
+      const datasets = [primaryDataset];
 
       if (secondaryData.length > 0) {
         datasets.push({
@@ -591,6 +705,7 @@
           pointHoverRadius: 0,
           tension: 0.3,
           order: 2,
+          type: isBar ? 'line' : undefined,
         });
       }
 
@@ -620,7 +735,7 @@
       const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
       const config = {
-        type: 'line',
+        type: isBar ? 'bar' : 'line',
         data: { labels, datasets },
         options: {
           responsive: true,
@@ -640,7 +755,11 @@
                 font: { size: 11, family: 'DM Sans' },
                 maxRotation: 0,
                 callback: function(value, index) {
-                  // Show only :00 labels
+                  if (isHourly) {
+                    // Show every 2nd hour label to avoid crowding
+                    return index % 2 === 0 ? this.getLabelForValue(value) : '';
+                  }
+                  // Show only :00 labels for 15min
                   if (index % 4 === 0) return this.getLabelForValue(value);
                   return '';
                 },
