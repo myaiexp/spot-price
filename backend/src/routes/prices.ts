@@ -247,7 +247,7 @@ export function pricesRoutes(db: Db): Hono {
       return c.json(heatmapCache.data);
     }
 
-    // Current week Mon..Sun in Helsinki time, data up to now
+    // Current week Mon..Sun in Helsinki time, include all available data
     const rows = await db.execute(sql`
       SELECT
         EXTRACT(ISODOW FROM datetime AT TIME ZONE 'Europe/Helsinki')::int AS weekday,
@@ -256,7 +256,8 @@ export function pricesRoutes(db: Db): Hono {
       FROM prices
       WHERE datetime AT TIME ZONE 'Europe/Helsinki'
         >= date_trunc('week', NOW() AT TIME ZONE 'Europe/Helsinki')
-        AND datetime < NOW()
+        AND datetime AT TIME ZONE 'Europe/Helsinki'
+        < date_trunc('week', NOW() AT TIME ZONE 'Europe/Helsinki') + interval '7 days'
       GROUP BY weekday, hour
       ORDER BY weekday, hour
     `);
@@ -271,11 +272,9 @@ export function pricesRoutes(db: Db): Hono {
     // Current Helsinki weekday (0=Mon) and hour for the frontend to know what's "future"
     const nowInfo = await db.execute(sql`
       SELECT
-        EXTRACT(ISODOW FROM NOW() AT TIME ZONE 'Europe/Helsinki')::int AS current_weekday,
-        EXTRACT(HOUR FROM NOW() AT TIME ZONE 'Europe/Helsinki')::int AS current_hour,
-        TO_CHAR(date_trunc('week', NOW() AT TIME ZONE 'Europe/Helsinki'), 'DD.MM.') AS week_start
+        EXTRACT(WEEK FROM NOW() AT TIME ZONE 'Europe/Helsinki')::int AS week_number
     `);
-    const now = (nowInfo.rows as Array<{ current_weekday: number; current_hour: number; week_start: string }>)[0];
+    const now = (nowInfo.rows as Array<{ week_number: number }>)[0];
 
     // Build the matrix — null for cells without data (future)
     let globalMin = Infinity;
@@ -303,9 +302,7 @@ export function pricesRoutes(db: Db): Hono {
       matrix,
       minPrice: Math.round(globalMin * 100) / 100,
       maxPrice: Math.round(globalMax * 100) / 100,
-      currentWeekday: now.current_weekday - 1,
-      currentHour: now.current_hour,
-      weekStart: now.week_start,
+      weekNumber: now.week_number,
     };
 
     heatmapCache = { data: response, timestamp: Date.now() };

@@ -1281,13 +1281,11 @@
       grid.style.display = 'grid';
       grid.innerHTML = '';
 
-      if (weekRange && state.heatmap.weekStart) {
-        weekRange.textContent = `vko ${state.heatmap.weekStart}`;
+      if (weekRange && state.heatmap.weekNumber) {
+        weekRange.textContent = `vko ${state.heatmap.weekNumber}`;
       }
 
       const heatmapData = state.heatmap.matrix;
-      const currentWeekday = state.heatmap.currentWeekday ?? 6;
-      const currentHour = state.heatmap.currentHour ?? 23;
 
       // Find min/max across populated values only
       let allValues = [];
@@ -1326,12 +1324,11 @@
           const cell = document.createElement('div');
           cell.className = 'heatmap-cell';
           const val = row.hours[h];
-          const isFuture = d > currentWeekday || (d === currentWeekday && h > currentHour);
 
-          if (isFuture || val === null) {
+          if (val === null || val === undefined) {
             cell.style.background = 'var(--border)';
             cell.style.opacity = '0.3';
-          } else if (val !== undefined && val !== 0) {
+          } else {
             cell.style.background = priceToColor(val, minPrice, maxPrice);
             cell.addEventListener('mouseenter', (e) => {
               tooltip.textContent = `${dayLabel} ${String(h).padStart(2, '0')}:00 — ${val.toFixed(2)} c/kWh`;
@@ -1346,9 +1343,6 @@
             cell.addEventListener('mouseleave', () => {
               tooltip.style.display = 'none';
             });
-          } else {
-            cell.style.background = 'var(--border)';
-            cell.style.opacity = '0.3';
           }
           grid.appendChild(cell);
         }
