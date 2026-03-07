@@ -1140,19 +1140,18 @@
     function findPeakBlock(slots) {
       if (!slots || slots.length === 0) return null;
 
-      // Threshold: median price
+      // Threshold: 60th percentile — above-average but not extreme
       const sorted = slots.map(s => s.priceWithTax).sort((a, b) => a - b);
-      const median = sorted[Math.floor(sorted.length / 2)];
+      const threshold = sorted[Math.floor(sorted.length * 0.6)];
 
-      // Mark slots above median, then bridge gaps ≤ 4 slots (1 hour)
-      const above = slots.map(s => s.priceWithTax >= median);
+      // Mark slots above threshold, then bridge gaps ≤ 2 slots (30 min)
+      const above = slots.map(s => s.priceWithTax >= threshold);
       const bridged = [...above];
       for (let i = 0; i < bridged.length; i++) {
         if (!bridged[i]) {
-          // Look ahead: if we find an above-median slot within 4, bridge
           let gap = 0;
           while (i + gap < bridged.length && !above[i + gap]) gap++;
-          if (gap <= 4 && i + gap < bridged.length && i > 0 && above[i - 1]) {
+          if (gap <= 2 && i + gap < bridged.length && i > 0 && above[i - 1]) {
             for (let j = i; j < i + gap; j++) bridged[j] = true;
           }
         }
