@@ -285,6 +285,217 @@
       color: var(--text-muted);
     }
 
+    /* Heatmap */
+    .heatmap-section {
+      margin-bottom: 32px;
+    }
+
+    .section-title {
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: 1.1rem;
+      margin-bottom: 12px;
+    }
+
+    .heatmap-grid {
+      display: grid;
+      grid-template-columns: auto repeat(24, 1fr);
+      gap: 2px;
+      overflow-x: auto;
+    }
+
+    .heatmap-header {
+      font-size: 0.65rem;
+      color: var(--text-muted);
+      text-align: center;
+      padding: 2px 0;
+      font-weight: 600;
+    }
+
+    .heatmap-row-label {
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      padding-right: 6px;
+      min-width: 28px;
+    }
+
+    .heatmap-cell {
+      width: 100%;
+      aspect-ratio: 1;
+      min-width: 20px;
+      max-width: 28px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+
+    .heatmap-cell:hover {
+      transform: scale(1.2);
+      box-shadow: 0 0 8px rgba(255, 255, 255, 0.15);
+      z-index: 2;
+      position: relative;
+    }
+
+    .heatmap-tooltip {
+      position: fixed;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 0.8rem;
+      color: var(--text);
+      pointer-events: none;
+      z-index: 100;
+      display: none;
+      white-space: nowrap;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    }
+
+    .heatmap-corner {
+      /* empty top-left corner cell */
+    }
+
+    .heatmap-placeholder {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      padding: 24px;
+      text-align: center;
+    }
+
+    /* Cost Estimator */
+    .estimator-section {
+      margin-bottom: 32px;
+    }
+
+    .device-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .device-chip {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 8px 16px;
+      font-family: var(--font-body);
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: background 0.2s, border-color 0.2s, color 0.2s;
+    }
+
+    .device-chip:hover {
+      border-color: var(--border-hover);
+      color: var(--text);
+    }
+
+    .device-chip.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #09090b;
+      font-weight: 600;
+    }
+
+    .estimator-inputs {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    .estimator-field {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex: 1;
+      min-width: 120px;
+    }
+
+    .estimator-field label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .estimator-field input {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-family: var(--font-body);
+      font-size: 0.9rem;
+      color: var(--text);
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .estimator-field input:focus {
+      border-color: var(--accent);
+    }
+
+    .estimator-field input::placeholder {
+      color: var(--text-muted);
+    }
+
+    .estimator-results {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+
+    .estimator-result-card {
+      padding: 16px;
+      text-align: center;
+    }
+
+    .estimator-result-card__label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 8px;
+    }
+
+    .estimator-result-card__value {
+      font-family: var(--font-display);
+      font-weight: 800;
+      font-size: 1.1rem;
+      margin-bottom: 4px;
+    }
+
+    .estimator-result-card__detail {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+
+    .estimator-result-card--best .estimator-result-card__value {
+      color: #22c55e;
+    }
+
+    .estimator-result-card--worst .estimator-result-card__value {
+      color: #ef4444;
+    }
+
+    .estimator-result-card--savings .estimator-result-card__value {
+      color: var(--accent);
+    }
+
+    .estimator-no-data {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      text-align: center;
+      padding: 16px;
+    }
+
     /* Footer */
     .footer {
       text-align: center;
@@ -354,6 +565,18 @@
 
       .chart-container canvas {
         height: 220px !important;
+      }
+
+      .estimator-results {
+        grid-template-columns: 1fr;
+      }
+
+      .estimator-inputs {
+        flex-direction: column;
+      }
+
+      .heatmap-cell {
+        min-width: 10px;
       }
     }
 
@@ -429,6 +652,39 @@
       </div>
     </div>
 
+    <!-- Heatmap -->
+    <div class="heatmap-section">
+      <h2 class="section-title">Viikkokuvio</h2>
+      <div class="card" id="heatmapCard">
+        <div class="heatmap-placeholder" id="heatmapPlaceholder">Ladataan...</div>
+        <div class="heatmap-grid" id="heatmapGrid" style="display:none;"></div>
+      </div>
+    </div>
+    <div class="heatmap-tooltip" id="heatmapTooltip"></div>
+
+    <!-- Cost Estimator -->
+    <div class="estimator-section">
+      <h2 class="section-title">Ajoitusavustin</h2>
+      <div class="device-chips" id="deviceChips"></div>
+      <div class="estimator-inputs">
+        <div class="estimator-field">
+          <label for="inputPower">Teho (kW)</label>
+          <input type="number" id="inputPower" min="0.1" step="0.1" placeholder="esim. 6">
+        </div>
+        <div class="estimator-field">
+          <label for="inputDuration">Kesto (h)</label>
+          <input type="number" id="inputDuration" min="0.25" step="0.25" placeholder="esim. 2">
+        </div>
+        <div class="estimator-field">
+          <label for="inputDeadline">Valmis viimeistään</label>
+          <input type="time" id="inputDeadline" placeholder="esim. 07:00">
+        </div>
+      </div>
+      <div id="estimatorResults">
+        <div class="estimator-no-data">Valitse laite tai syötä teho ja kesto</div>
+      </div>
+    </div>
+
     <!-- Footer -->
     <footer class="footer">
       Tiedot: spot-hinta.fi • Päivitetään 15 min välein
@@ -445,6 +701,7 @@
       tomorrow: null,
       now: null,
       activeTab: 'today',
+      heatmap: null,
       chartType: 'area',
       resolution: '15min',
       chart: null,
@@ -462,21 +719,25 @@
 
     async function loadAllData() {
       try {
-        const [today, yesterday, tomorrow, now] = await Promise.all([
+        const [today, yesterday, tomorrow, now, heatmap] = await Promise.all([
           fetchJSON('/prices/today'),
           fetchJSON('/prices/yesterday'),
           fetchJSON('/prices/tomorrow').catch(() => null),
           fetchJSON('/prices/now'),
+          fetchJSON('/prices/heatmap').catch(() => null),
         ]);
         state.today = today;
         state.yesterday = yesterday;
         state.tomorrow = tomorrow;
         state.now = now;
+        state.heatmap = heatmap;
 
         updateTomorrowTab();
         renderHero();
         renderChart();
         renderInsights();
+        renderHeatmap();
+        updateEstimator();
       } catch (err) {
         console.error('Failed to load data:', err);
         showError('Tietojen lataus epäonnistui. Yritä myöhemmin uudelleen.');
@@ -978,6 +1239,309 @@
           `Keskihinta ${eurToCents(peak.avgPrice)} c/kWh`;
       }
     }
+
+    // ─── Heatmap ───────────────────────────────────────────────────────
+    const DAY_LABELS = ['Ma', 'Ti', 'Ke', 'To', 'Pe', 'La', 'Su'];
+
+    function priceToColor(value, min, max) {
+      if (max === min) return '#e8a308';
+      const ratio = Math.max(0, Math.min(1, (value - min) / (max - min)));
+      // HSL interpolation: green (142°) → amber (39°) → red (0°)
+      let h, s, l;
+      if (ratio <= 0.5) {
+        const t = ratio / 0.5;
+        h = 142 - (142 - 39) * t;
+        s = 72 + (85 - 72) * t;
+        l = 50 + (52 - 50) * t;
+      } else {
+        const t = (ratio - 0.5) / 0.5;
+        h = 39 - (39 - 0) * t;
+        s = 85 + (72 - 85) * t;
+        l = 52 + (50 - 52) * t;
+      }
+      return `hsl(${h}, ${s}%, ${l}%)`;
+    }
+
+    function renderHeatmap() {
+      const grid = document.getElementById('heatmapGrid');
+      const placeholder = document.getElementById('heatmapPlaceholder');
+      const tooltip = document.getElementById('heatmapTooltip');
+
+      if (!state.heatmap || !state.heatmap.matrix || state.heatmap.matrix.length === 0) {
+        grid.style.display = 'none';
+        placeholder.style.display = 'block';
+        placeholder.textContent = 'Ei riittävästi historiatietoja';
+        return;
+      }
+
+      placeholder.style.display = 'none';
+      grid.style.display = 'grid';
+      grid.innerHTML = '';
+
+      const heatmapData = state.heatmap.matrix;
+
+      // Find min/max across all values
+      let allValues = [];
+      for (const row of heatmapData) {
+        for (const val of row.hours) {
+          if (val !== null && val !== undefined) allValues.push(val);
+        }
+      }
+      const minPrice = Math.min(...allValues);
+      const maxPrice = Math.max(...allValues);
+
+      // Corner cell
+      const corner = document.createElement('div');
+      corner.className = 'heatmap-corner';
+      grid.appendChild(corner);
+
+      // Hour headers
+      for (let h = 0; h < 24; h++) {
+        const hdr = document.createElement('div');
+        hdr.className = 'heatmap-header';
+        hdr.textContent = h;
+        grid.appendChild(hdr);
+      }
+
+      // Rows
+      for (let d = 0; d < heatmapData.length; d++) {
+        const row = heatmapData[d];
+        const dayLabel = row.label;
+
+        const label = document.createElement('div');
+        label.className = 'heatmap-row-label';
+        label.textContent = dayLabel;
+        grid.appendChild(label);
+
+        for (let h = 0; h < 24; h++) {
+          const cell = document.createElement('div');
+          cell.className = 'heatmap-cell';
+          const val = row.hours[h];
+          if (val !== null && val !== undefined) {
+            cell.style.background = priceToColor(val, minPrice, maxPrice);
+            cell.addEventListener('mouseenter', (e) => {
+              tooltip.textContent = `${dayLabel} ${String(h).padStart(2, '0')}:00 — ${val.toFixed(2)} c/kWh`;
+              tooltip.style.display = 'block';
+              tooltip.style.left = (e.clientX + 12) + 'px';
+              tooltip.style.top = (e.clientY - 32) + 'px';
+            });
+            cell.addEventListener('mousemove', (e) => {
+              tooltip.style.left = (e.clientX + 12) + 'px';
+              tooltip.style.top = (e.clientY - 32) + 'px';
+            });
+            cell.addEventListener('mouseleave', () => {
+              tooltip.style.display = 'none';
+            });
+          } else {
+            cell.style.background = 'var(--bg)';
+          }
+          grid.appendChild(cell);
+        }
+      }
+    }
+
+    // ─── Cost Estimator ───────────────────────────────────────────────
+    const DEVICES = [
+      { name: 'Kiuas', icon: '🔥', power: 6, duration: 2 },
+      { name: 'Sähköauto', icon: '🚗', power: 11, duration: 4 },
+      { name: 'Pyykinpesukone', icon: '👕', power: 2, duration: 2 },
+      { name: 'Astianpesukone', icon: '🍽', power: 1.8, duration: 1.5 },
+      { name: 'Kuivausrumpu', icon: '💨', power: 2.5, duration: 1.5 },
+      { name: 'Muu', icon: '⚙', power: null, duration: null },
+    ];
+
+    let selectedDevice = -1;
+    let estimatorDebounceTimer = null;
+
+    function initDeviceChips() {
+      const container = document.getElementById('deviceChips');
+      DEVICES.forEach((device, idx) => {
+        const chip = document.createElement('button');
+        chip.className = 'device-chip';
+        chip.textContent = `${device.icon} ${device.name}`;
+        chip.addEventListener('click', () => {
+          // Toggle selection
+          if (selectedDevice === idx) {
+            selectedDevice = -1;
+            chip.classList.remove('active');
+          } else {
+            container.querySelectorAll('.device-chip').forEach(c => c.classList.remove('active'));
+            selectedDevice = idx;
+            chip.classList.add('active');
+
+            // Auto-populate inputs
+            const powerInput = document.getElementById('inputPower');
+            const durationInput = document.getElementById('inputDuration');
+            if (device.power !== null) powerInput.value = device.power;
+            else powerInput.value = '';
+            if (device.duration !== null) durationInput.value = device.duration;
+            else durationInput.value = '';
+          }
+          scheduleEstimatorUpdate();
+        });
+        container.appendChild(chip);
+      });
+    }
+
+    function scheduleEstimatorUpdate() {
+      clearTimeout(estimatorDebounceTimer);
+      estimatorDebounceTimer = setTimeout(updateEstimator, 300);
+    }
+
+    // Listen for input changes
+    document.getElementById('inputPower').addEventListener('input', scheduleEstimatorUpdate);
+    document.getElementById('inputDuration').addEventListener('input', scheduleEstimatorUpdate);
+    document.getElementById('inputDeadline').addEventListener('input', scheduleEstimatorUpdate);
+
+    function getEstimatorSlots() {
+      let slots = [];
+      if (state.today && state.today.slots) {
+        slots = slots.concat(state.today.slots);
+      }
+      if (state.tomorrow && state.tomorrow.slots && state.tomorrow.slots.length > 0) {
+        slots = slots.concat(state.tomorrow.slots);
+      }
+      return slots;
+    }
+
+    function findOptimalWindow(slots, durationHours, powerKw, deadlineHour) {
+      const quarterSlots = Math.ceil(durationHours * 4);
+      if (slots.length < quarterSlots) return null;
+
+      let deadlineSlotIndex = null;
+      if (deadlineHour !== null && deadlineHour !== undefined) {
+        // Find the slot index where the deadline falls
+        // Deadline is relative: if deadline is e.g. 7, find first slot at or after 07:00
+        // For today+tomorrow combined, we need to find by datetime
+        for (let i = 0; i < slots.length; i++) {
+          const d = new Date(slots[i].datetime);
+          const slotHour = d.getHours() + d.getMinutes() / 60;
+          // If deadline is in the future relative to first slot
+          if (i > 0 && slotHour >= deadlineHour - 0.001 && slotHour < deadlineHour + 0.25) {
+            deadlineSlotIndex = i;
+            break;
+          }
+        }
+        // If deadline wasn't found, try matching any occurrence
+        if (deadlineSlotIndex === null) {
+          for (let i = 0; i < slots.length; i++) {
+            const d = new Date(slots[i].datetime);
+            const h = d.getHours();
+            const m = d.getMinutes();
+            if (h === Math.floor(deadlineHour) && m === 0) {
+              deadlineSlotIndex = i;
+              // Prefer a later occurrence (tomorrow) if window doesn't fit
+              // but break on first match for simplicity
+            }
+          }
+        }
+        if (deadlineSlotIndex === null) return null;
+      }
+
+      const maxEnd = deadlineSlotIndex !== null ? deadlineSlotIndex : slots.length;
+
+      let bestCost = Infinity;
+      let bestStart = -1;
+      let worstCost = -Infinity;
+      let worstStart = -1;
+
+      for (let i = 0; i <= maxEnd - quarterSlots; i++) {
+        let cost = 0;
+        for (let j = i; j < i + quarterSlots; j++) {
+          cost += slots[j].priceWithTax * powerKw * 0.25;
+        }
+        if (cost < bestCost) {
+          bestCost = cost;
+          bestStart = i;
+        }
+        if (cost > worstCost) {
+          worstCost = cost;
+          worstStart = i;
+        }
+      }
+
+      if (bestStart === -1) return null;
+
+      const formatSlotTime = (idx) => {
+        if (idx < slots.length) {
+          return formatTime(slots[idx].datetime);
+        }
+        // Compute from last slot
+        const last = new Date(slots[slots.length - 1].datetime);
+        last.setMinutes(last.getMinutes() + (idx - slots.length + 1) * 15);
+        return formatTime(last.toISOString());
+      };
+
+      const endSlotBest = bestStart + quarterSlots;
+      const endSlotWorst = worstStart + quarterSlots;
+
+      return {
+        best: {
+          startTime: formatSlotTime(bestStart),
+          endTime: formatSlotTime(endSlotBest < slots.length ? endSlotBest : slots.length - 1),
+          cost: bestCost,
+        },
+        worst: {
+          startTime: formatSlotTime(worstStart),
+          endTime: formatSlotTime(endSlotWorst < slots.length ? endSlotWorst : slots.length - 1),
+          cost: worstCost,
+        },
+        savings: worstCost - bestCost,
+      };
+    }
+
+    function updateEstimator() {
+      const container = document.getElementById('estimatorResults');
+      const power = parseFloat(document.getElementById('inputPower').value);
+      const duration = parseFloat(document.getElementById('inputDuration').value);
+      const deadlineStr = document.getElementById('inputDeadline').value;
+
+      if (!power || !duration || power <= 0 || duration <= 0) {
+        container.innerHTML = '<div class="estimator-no-data">Valitse laite tai syötä teho ja kesto</div>';
+        return;
+      }
+
+      const slots = getEstimatorSlots();
+      if (slots.length === 0) {
+        container.innerHTML = '<div class="estimator-no-data">Ei hintatietoja laskentaan</div>';
+        return;
+      }
+
+      let deadlineHour = null;
+      if (deadlineStr) {
+        const parts = deadlineStr.split(':');
+        deadlineHour = parseInt(parts[0]) + parseInt(parts[1] || 0) / 60;
+      }
+
+      const result = findOptimalWindow(slots, duration, power, deadlineHour);
+
+      if (!result) {
+        container.innerHTML = '<div class="estimator-no-data">Ei sopivia aikaikkunoita löytynyt</div>';
+        return;
+      }
+
+      container.innerHTML = `
+        <div class="estimator-results">
+          <div class="estimator-result-card estimator-result-card--best card">
+            <div class="estimator-result-card__label">Halvin aika</div>
+            <div class="estimator-result-card__value">${result.best.cost.toFixed(2)} €</div>
+            <div class="estimator-result-card__detail">${result.best.startTime}–${result.best.endTime}</div>
+          </div>
+          <div class="estimator-result-card estimator-result-card--worst card">
+            <div class="estimator-result-card__label">Kallein aika</div>
+            <div class="estimator-result-card__value">${result.worst.cost.toFixed(2)} €</div>
+            <div class="estimator-result-card__detail">${result.worst.startTime}–${result.worst.endTime}</div>
+          </div>
+          <div class="estimator-result-card estimator-result-card--savings card">
+            <div class="estimator-result-card__label">Säästö</div>
+            <div class="estimator-result-card__value">${result.savings.toFixed(2)} €</div>
+            <div class="estimator-result-card__detail">oikealla ajoituksella</div>
+          </div>
+        </div>
+      `;
+    }
+
+    initDeviceChips();
 
     // ─── Auto-refresh ────────────────────────────────────────────────
     let lastQuarterIndex = getCurrentQuarterIndex();
