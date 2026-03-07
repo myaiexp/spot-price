@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { gte, lt, and, asc } from 'drizzle-orm';
+import { gte, lt, and, asc, sql } from 'drizzle-orm';
 import type { Db } from '../db/connection.js';
 import { prices } from '../db/schema.js';
 
@@ -247,94 +247,46 @@ export function pricesRoutes(db: Db): Hono {
       return c.json(heatmapCache.data);
     }
 
-    // Fetch all prices ordered by datetime ASC
-    const rows = await db
-      .select()
-      .from(prices)
-      .orderBy(asc(prices.datetime));
+    // Pre-aggregate in SQL: group by (weekday, hour, iso_week), avg sub-hour slots
+    // Returns ~680 rows instead of 115k+
+    const rows = await db.execute(sql`
+      SELECT
+        EXTRACT(ISODOW FROM datetime AT TIME ZONE 'Europe/Helsinki')::int AS weekday,
+        EXTRACT(HOUR FROM datetime AT TIME ZONE 'Europe/Helsinki')::int AS hour,
+        TO_CHAR(datetime AT TIME ZONE 'Europe/Helsinki', 'IYYY-"W"IW') AS week_id,
+        AVG(price_with_tax::float) AS avg_price
+      FROM prices
+      GROUP BY weekday, hour, week_id
+      ORDER BY week_id
+    `);
 
-    // Group by (weekday, hour, week-identifier)
-    // Key: "weekday-hour-weekId" → array of price values (oldest first)
-    const hourlyByWeek = new Map<string, number[]>();
+    // Group by (weekday, hour), collect weekly averages chronologically
+    const cellValues = new Map<string, number[]>();
 
-    for (const row of rows) {
-      const dt = new Date(row.datetime);
-      // Extract Helsinki hour
-      const hour = parseInt(
-        dt.toLocaleString('en-GB', { timeZone: 'Europe/Helsinki', hour: '2-digit', hour12: false }),
-        10
-      );
-      // Get weekday as 0=Mon..6=Sun
-      const dayName = dt.toLocaleString('en-US', { timeZone: 'Europe/Helsinki', weekday: 'long' });
-      const dayMap: Record<string, number> = {
-        Monday: 0, Tuesday: 1, Wednesday: 2, Thursday: 3,
-        Friday: 4, Saturday: 5, Sunday: 6,
-      };
-      const weekday = dayMap[dayName];
-
-      // Week identifier: ISO week-year (use Helsinki date for consistency)
-      const helsinkiDate = dt.toLocaleDateString('en-CA', { timeZone: 'Europe/Helsinki' });
-      // Compute ISO week number from Helsinki date
-      const [y, m, d] = helsinkiDate.split('-').map(Number);
-      const dateObj = new Date(Date.UTC(y, m - 1, d));
-      const dayOfWeek = dateObj.getUTCDay() || 7; // Mon=1..Sun=7
-      dateObj.setUTCDate(dateObj.getUTCDate() + 4 - dayOfWeek);
-      const yearStart = new Date(Date.UTC(dateObj.getUTCFullYear(), 0, 1));
-      const weekNum = Math.ceil(((dateObj.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
-      const weekId = `${dateObj.getUTCFullYear()}-W${weekNum}`;
-
-      const key = `${weekday}-${hour}-${weekId}`;
-      const price = parseFloat(row.priceWithTax);
-
-      if (!hourlyByWeek.has(key)) {
-        hourlyByWeek.set(key, []);
-      }
-      hourlyByWeek.get(key)!.push(price);
-    }
-
-    // Step 4: Within each (weekday, hour, week), EMA the sub-hour slots into one hourly value
-    // Step 5: For each (weekday, hour), collect weekly values chronologically, compute EMA
-    // Group weekly values by (weekday, hour)
-    const cellValues = new Map<string, { weekId: string; value: number }[]>();
-
-    for (const [key, values] of hourlyByWeek) {
-      const parts = key.split('-');
-      const weekdayStr = parts[0];
-      const hourStr = parts[1];
-      const weekId = parts.slice(2).join('-');
-
-      // EMA sub-hour slots if multiple, otherwise use as-is
-      const hourlyValue = values.length > 1
-        ? computeEma(values, 0.3)
-        : values[0];
-
-      const cellKey = `${weekdayStr}-${hourStr}`;
+    for (const row of rows.rows as Array<{ weekday: number; hour: number; week_id: string; avg_price: number }>) {
+      // ISODOW: 1=Mon..7=Sun, convert to 0=Mon..6=Sun
+      const weekday = row.weekday - 1;
+      const cellKey = `${weekday}-${row.hour}`;
       if (!cellValues.has(cellKey)) {
         cellValues.set(cellKey, []);
       }
-      cellValues.get(cellKey)!.push({ weekId, value: hourlyValue });
+      cellValues.get(cellKey)!.push(row.avg_price);
     }
 
-    // Build the matrix
+    // Build the matrix with EMA across weeks
     let globalMin = Infinity;
     let globalMax = -Infinity;
 
     const matrix = Array.from({ length: 7 }, (_, day) => {
       const hours = Array.from({ length: 24 }, (_, hour) => {
         const cellKey = `${day}-${hour}`;
-        const entries = cellValues.get(cellKey);
+        const weeklyValues = cellValues.get(cellKey);
 
-        if (!entries || entries.length === 0) {
+        if (!weeklyValues || weeklyValues.length === 0) {
           return 0;
         }
 
-        // Sort by weekId chronologically
-        entries.sort((a, b) => a.weekId.localeCompare(b.weekId));
-        const weeklyValues = entries.map((e) => e.value);
-
-        // EMA across weeks
         const emaValue = computeEma(weeklyValues, 0.3);
-        // DB stores EUR/kWh, convert to c/kWh (× 100)
         const centsPerKwh = emaValue * 100;
 
         if (centsPerKwh < globalMin) globalMin = centsPerKwh;
@@ -346,7 +298,6 @@ export function pricesRoutes(db: Db): Hono {
       return { day, label: DAY_LABELS[day], hours };
     });
 
-    // Handle edge case where no data exists
     if (globalMin === Infinity) globalMin = 0;
     if (globalMax === -Infinity) globalMax = 0;
 
@@ -356,7 +307,6 @@ export function pricesRoutes(db: Db): Hono {
       maxPrice: Math.round(globalMax * 100) / 100,
     };
 
-    // Cache the result
     heatmapCache = { data: response, timestamp: Date.now() };
 
     return c.json(response);

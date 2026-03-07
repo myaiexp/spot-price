@@ -719,29 +719,32 @@
 
     async function loadAllData() {
       try {
-        const [today, yesterday, tomorrow, now, heatmap] = await Promise.all([
+        const [today, yesterday, tomorrow, now] = await Promise.all([
           fetchJSON('/prices/today'),
           fetchJSON('/prices/yesterday'),
           fetchJSON('/prices/tomorrow').catch(() => null),
           fetchJSON('/prices/now'),
-          fetchJSON('/prices/heatmap').catch(() => null),
         ]);
         state.today = today;
         state.yesterday = yesterday;
         state.tomorrow = tomorrow;
         state.now = now;
-        state.heatmap = heatmap;
 
         updateTomorrowTab();
         renderHero();
         renderChart();
         renderInsights();
-        renderHeatmap();
         updateEstimator();
       } catch (err) {
         console.error('Failed to load data:', err);
         showError('Tietojen lataus epäonnistui. Yritä myöhemmin uudelleen.');
       }
+
+      // Load heatmap separately — it's slow on cold start
+      fetchJSON('/prices/heatmap').then(heatmap => {
+        state.heatmap = heatmap;
+        renderHeatmap();
+      }).catch(() => {});
     }
 
     function showError(msg) {
