@@ -874,12 +874,18 @@
     });
 
     // ─── Chart ───────────────────────────────────────────────────────
-    function buildGradient(ctx, chartArea) {
+    function buildGradient(ctx, chartArea, forBar = false) {
       if (!chartArea) return 'rgba(232, 163, 8, 0.3)';
       const gradient = ctx.createLinearGradient(0, chartArea.bottom, 0, chartArea.top);
-      gradient.addColorStop(0, 'rgba(34, 197, 94, 0.35)');
-      gradient.addColorStop(0.5, 'rgba(232, 163, 8, 0.25)');
-      gradient.addColorStop(1, 'rgba(239, 68, 68, 0.3)');
+      if (forBar) {
+        gradient.addColorStop(0, 'rgba(34, 197, 94, 0.85)');
+        gradient.addColorStop(0.5, 'rgba(232, 163, 8, 0.75)');
+        gradient.addColorStop(1, 'rgba(239, 68, 68, 0.85)');
+      } else {
+        gradient.addColorStop(0, 'rgba(34, 197, 94, 0.35)');
+        gradient.addColorStop(0.5, 'rgba(232, 163, 8, 0.25)');
+        gradient.addColorStop(1, 'rgba(239, 68, 68, 0.3)');
+      }
       return gradient;
     }
 
@@ -931,17 +937,11 @@
         borderColor: 'rgba(232, 163, 8, 1)',
         borderWidth: isBar ? 0 : 2,
         fill: !isBar,
-        backgroundColor: isBar
-          ? function(context) {
-              const chart = context.chart;
-              const { ctx, chartArea } = chart;
-              return buildGradient(ctx, chartArea);
-            }
-          : function(context) {
-              const chart = context.chart;
-              const { ctx, chartArea } = chart;
-              return buildGradient(ctx, chartArea);
-            },
+        backgroundColor: function(context) {
+            const chart = context.chart;
+            const { ctx, chartArea } = chart;
+            return buildGradient(ctx, chartArea, isBar);
+          },
         pointRadius: 0,
         pointHoverRadius: isBar ? 0 : 5,
         pointHoverBackgroundColor: 'rgba(232, 163, 8, 1)',
@@ -1017,11 +1017,10 @@
                 maxRotation: 0,
                 callback: function(value, index) {
                   if (isHourly) {
-                    // Show every 2nd hour label to avoid crowding
-                    return index % 2 === 0 ? this.getLabelForValue(value) : '';
+                    return index % 3 === 0 ? this.getLabelForValue(value) : '';
                   }
-                  // Show only :00 labels for 15min
-                  if (index % 4 === 0) return this.getLabelForValue(value);
+                  // 15min: show every 3 hours (every 12th slot)
+                  if (index % 12 === 0) return this.getLabelForValue(value);
                   return '';
                 },
                 autoSkip: false,
