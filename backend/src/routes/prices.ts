@@ -240,55 +240,53 @@ export function pricesRoutes(db: Db): Hono {
     return c.json({ slots, from, to });
   });
 
-  // GET /heatmap — EMA-weighted heatmap of prices by weekday and hour
+  // GET /heatmap — current week's hourly prices as a 7×24 grid
   router.get('/heatmap', async (c) => {
     // Check cache
     if (heatmapCache && Date.now() - heatmapCache.timestamp < HEATMAP_TTL) {
       return c.json(heatmapCache.data);
     }
 
-    // Pre-aggregate in SQL: group by (weekday, hour, iso_week), avg sub-hour slots
-    // Returns ~680 rows instead of 115k+
+    // Current week Mon..Sun in Helsinki time, data up to now
     const rows = await db.execute(sql`
       SELECT
         EXTRACT(ISODOW FROM datetime AT TIME ZONE 'Europe/Helsinki')::int AS weekday,
         EXTRACT(HOUR FROM datetime AT TIME ZONE 'Europe/Helsinki')::int AS hour,
-        TO_CHAR(datetime AT TIME ZONE 'Europe/Helsinki', 'IYYY-"W"IW') AS week_id,
         AVG(price_with_tax::float) AS avg_price
       FROM prices
-      GROUP BY weekday, hour, week_id
-      ORDER BY week_id
+      WHERE datetime AT TIME ZONE 'Europe/Helsinki'
+        >= date_trunc('week', NOW() AT TIME ZONE 'Europe/Helsinki')
+        AND datetime < NOW()
+      GROUP BY weekday, hour
+      ORDER BY weekday, hour
     `);
 
-    // Group by (weekday, hour), collect weekly averages chronologically
-    const cellValues = new Map<string, number[]>();
-
-    for (const row of rows.rows as Array<{ weekday: number; hour: number; week_id: string; avg_price: number }>) {
-      // ISODOW: 1=Mon..7=Sun, convert to 0=Mon..6=Sun
-      const weekday = row.weekday - 1;
-      const cellKey = `${weekday}-${row.hour}`;
-      if (!cellValues.has(cellKey)) {
-        cellValues.set(cellKey, []);
-      }
-      cellValues.get(cellKey)!.push(row.avg_price);
+    // Build lookup
+    const cellValues = new Map<string, number>();
+    for (const row of rows.rows as Array<{ weekday: number; hour: number; avg_price: number }>) {
+      const weekday = row.weekday - 1; // ISODOW 1=Mon → 0
+      cellValues.set(`${weekday}-${row.hour}`, row.avg_price);
     }
 
-    // Build the matrix with EMA across weeks
+    // Current Helsinki weekday (0=Mon) and hour for the frontend to know what's "future"
+    const nowInfo = await db.execute(sql`
+      SELECT
+        EXTRACT(ISODOW FROM NOW() AT TIME ZONE 'Europe/Helsinki')::int AS current_weekday,
+        EXTRACT(HOUR FROM NOW() AT TIME ZONE 'Europe/Helsinki')::int AS current_hour,
+        TO_CHAR(date_trunc('week', NOW() AT TIME ZONE 'Europe/Helsinki'), 'DD.MM.') AS week_start
+    `);
+    const now = (nowInfo.rows as Array<{ current_weekday: number; current_hour: number; week_start: string }>)[0];
+
+    // Build the matrix — null for cells without data (future)
     let globalMin = Infinity;
     let globalMax = -Infinity;
 
     const matrix = Array.from({ length: 7 }, (_, day) => {
       const hours = Array.from({ length: 24 }, (_, hour) => {
-        const cellKey = `${day}-${hour}`;
-        const weeklyValues = cellValues.get(cellKey);
+        const price = cellValues.get(`${day}-${hour}`);
+        if (price === undefined) return null;
 
-        if (!weeklyValues || weeklyValues.length === 0) {
-          return 0;
-        }
-
-        const emaValue = computeEma(weeklyValues, 0.3);
-        const centsPerKwh = emaValue * 100;
-
+        const centsPerKwh = price * 100;
         if (centsPerKwh < globalMin) globalMin = centsPerKwh;
         if (centsPerKwh > globalMax) globalMax = centsPerKwh;
 
@@ -305,6 +303,9 @@ export function pricesRoutes(db: Db): Hono {
       matrix,
       minPrice: Math.round(globalMin * 100) / 100,
       maxPrice: Math.round(globalMax * 100) / 100,
+      currentWeekday: now.current_weekday - 1,
+      currentHour: now.current_hour,
+      weekStart: now.week_start,
     };
 
     heatmapCache = { data: response, timestamp: Date.now() };
