@@ -1140,30 +1140,37 @@
     function findPeakBlock(slots) {
       if (!slots || slots.length === 0) return null;
 
-      // Determine threshold: expensive third
-      const prices = slots.map(s => s.priceWithTax).sort((a, b) => a - b);
-      const threshold = prices[Math.floor(prices.length * 2 / 3)];
+      // Threshold: median price
+      const sorted = slots.map(s => s.priceWithTax).sort((a, b) => a - b);
+      const median = sorted[Math.floor(sorted.length / 2)];
 
-      let bestStart = -1;
-      let bestLen = 0;
-      let curStart = -1;
-      let curLen = 0;
-
-      for (let i = 0; i < slots.length; i++) {
-        if (slots[i].priceWithTax >= threshold) {
-          if (curStart === -1) curStart = i;
-          curLen++;
-          if (curLen > bestLen) {
-            bestLen = curLen;
-            bestStart = curStart;
+      // Mark slots above median, then bridge gaps ≤ 4 slots (1 hour)
+      const above = slots.map(s => s.priceWithTax >= median);
+      const bridged = [...above];
+      for (let i = 0; i < bridged.length; i++) {
+        if (!bridged[i]) {
+          // Look ahead: if we find an above-median slot within 4, bridge
+          let gap = 0;
+          while (i + gap < bridged.length && !above[i + gap]) gap++;
+          if (gap <= 4 && i + gap < bridged.length && i > 0 && above[i - 1]) {
+            for (let j = i; j < i + gap; j++) bridged[j] = true;
           }
-        } else {
-          curStart = -1;
-          curLen = 0;
         }
       }
 
-      if (bestStart === -1) return null;
+      // Find longest contiguous run in bridged array
+      let bestStart = -1, bestLen = 0, curStart = -1, curLen = 0;
+      for (let i = 0; i < bridged.length; i++) {
+        if (bridged[i]) {
+          if (curStart === -1) curStart = i;
+          curLen++;
+          if (curLen > bestLen) { bestLen = curLen; bestStart = curStart; }
+        } else {
+          curStart = -1; curLen = 0;
+        }
+      }
+
+      if (bestStart === -1 || bestLen < 4) return null;
 
       let sum = 0;
       for (let i = bestStart; i < bestStart + bestLen; i++) {
