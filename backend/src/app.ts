@@ -7,7 +7,9 @@ import { collectPrices } from './collector.js';
 export function createApp(db: Db): Hono {
   const app = new Hono();
 
-  app.use('*', cors());
+  app.use('*', cors({
+    origin: ['https://mase.fi', 'http://localhost:5173'],
+  }));
 
   app.get('/api/health', (c) => c.json({ status: 'ok' }));
 
