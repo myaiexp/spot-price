@@ -13,7 +13,7 @@ export function main(): void {
   const db = createDb(databaseUrl);
   const app = createApp(db);
 
-  serve({ fetch: app.fetch, port }, () => {
+  serve({ fetch: app.fetch, port, hostname: '127.0.0.1' }, () => {
     console.log(`Spot price API running on port ${port}`);
   });
 }
