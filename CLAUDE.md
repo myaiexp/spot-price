@@ -44,7 +44,7 @@ backend/
 - **Live URL**: https://mase.fi/porssi (frontend), https://mase.fi/porssi/api/ (backend proxy)
 - **Deploy**: `git deployboth`
 - **VPS path**: `/opt/spot-price` (env file: `/opt/spot-price/.env`)
-- **Type**: service (port 3500) + static frontend
+- **Type**: service (port 3600) + static frontend
 - **Service**: `spot-price.service` (systemd)
 - **Timer**: `spot-price-collector.timer` (every 15 min)
 - **Backfill**: `ssh vps "cd /opt/spot-price && export $(cat .env | xargs) && cd backend && node dist/collector.js --backfill"`
