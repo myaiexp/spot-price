@@ -8,6 +8,23 @@ export function getHelsinkiToday(): string {
 }
 
 /**
+ * True if `dateStr` (already known to match the YYYY-MM-DD shape) names a real
+ * calendar date. A plain format regex still accepts impossible dates like
+ * 2026-02-30, 2026-13-01 or 2026-00-01; JS then either silently normalises them
+ * (Feb 30 → Mar 2) or yields an invalid Date. Reconstruct the date in UTC and
+ * confirm every field survives the round-trip, so normalised inputs are caught.
+ */
+export function isValidCalendarDate(dateStr: string): boolean {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const dt = new Date(Date.UTC(year, month - 1, day));
+  return (
+    dt.getUTCFullYear() === year &&
+    dt.getUTCMonth() === month - 1 &&
+    dt.getUTCDate() === day
+  );
+}
+
+/**
  * UTC instant at which Helsinki's wall clock reads 00:00 on `dateStr`.
  *
  * Helsinki is +03:00 (EEST, summer) or +02:00 (EET, winter). Try EEST first:

@@ -3,8 +3,8 @@ import { Hono } from 'hono';
 import { gte, lt, and, asc } from 'drizzle-orm';
 import type { Db } from '../db/connection.js';
 import { prices } from '../db/schema.js';
-import { getHelsinkiToday, getHelsinkiDateRange, shiftDate } from '../utils/helsinki-time.js';
-import { getHeatmap } from '../queries/heatmap.js';
+import { getHelsinkiToday, getHelsinkiDateRange, shiftDate, isValidCalendarDate } from '../utils/helsinki-time.js';
+import { createHeatmap } from '../queries/heatmap.js';
 
 interface PriceSlot {
   datetime: string;
@@ -40,6 +40,8 @@ async function getSlotsForDate(db: Db, dateStr: string): Promise<PriceSlot[]> {
 
 export function pricesRoutes(db: Db): Hono {
   const router = new Hono();
+  // Per-app heatmap query: each app instance gets its own cache (no cross-app leak).
+  const getHeatmap = createHeatmap();
 
   // GET /today — all slots for today (Helsinki time)
   router.get('/today', async (c) => {
@@ -138,6 +140,13 @@ export function pricesRoutes(db: Db): Hono {
     const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
     if (!dateRegex.test(from) || !dateRegex.test(to)) {
       return c.json({ error: 'Dates must be in YYYY-MM-DD format' }, 400);
+    }
+
+    // Reject well-formed but impossible calendar dates (e.g. 2026-02-30,
+    // 2026-13-01) — JS would otherwise silently normalise them and shift the
+    // queried range, or throw on the invalid Date.
+    if (!isValidCalendarDate(from) || !isValidCalendarDate(to)) {
+      return c.json({ error: 'Dates must be valid calendar dates (YYYY-MM-DD)' }, 400);
     }
 
     // Check max 90 days
