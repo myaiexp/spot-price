@@ -108,7 +108,7 @@ export async function backfillPrices(db: Db): Promise<{ totalUpserted: number }>
   return { totalUpserted };
 }
 
-export async function collectPrices(db: Db): Promise<{ inserted: number; updated: number }> {
+export async function collectPrices(db: Db): Promise<{ upserted: number }> {
   const response = await fetch('https://api.spot-hinta.fi/TodayAndDayForward');
 
   if (!response.ok) {
@@ -118,7 +118,7 @@ export async function collectPrices(db: Db): Promise<{ inserted: number; updated
   const slots: SpotHintaSlot[] = await response.json();
 
   if (!Array.isArray(slots) || slots.length === 0) {
-    return { inserted: 0, updated: 0 };
+    return { upserted: 0 };
   }
 
   const values = slots.map((slot) => ({
@@ -138,12 +138,10 @@ export async function collectPrices(db: Db): Promise<{ inserted: number; updated
       },
     });
 
-  const totalRows = slots.length;
-  const rowsAffected = result.rowCount ?? 0;
-  // PostgreSQL INSERT ... ON CONFLICT DO UPDATE reports all affected rows.
-  // We can't distinguish inserted vs updated without RETURNING + pre-query,
-  // so report total as inserted (first run) — the caller just needs the count.
-  return { inserted: rowsAffected, updated: totalRows - rowsAffected };
+  // PostgreSQL INSERT ... ON CONFLICT DO UPDATE reports rowCount as the total
+  // affected rows (inserted + updated combined), so it cannot be split into an
+  // inserted/updated breakdown. Report the single honest count.
+  return { upserted: result.rowCount ?? 0 };
 }
 
 // CLI entry point: run directly with `tsx src/collector.ts`
@@ -172,7 +170,7 @@ if (isMainModule) {
       console.log(`Backfill complete: ${result.totalUpserted} total rows upserted`);
     } else {
       const result = await collectPrices(db);
-      console.log(`Collection complete: ${result.inserted} inserted, ${result.updated} updated`);
+      console.log(`Collection complete: ${result.upserted} rows upserted`);
     }
     process.exit(0);
   } catch (err) {
