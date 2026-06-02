@@ -8,51 +8,46 @@ export function getHelsinkiToday(): string {
 }
 
 /**
- * Given a YYYY-MM-DD string, returns UTC Date objects representing
- * midnight-to-midnight in Helsinki time.
+ * UTC instant at which Helsinki's wall clock reads 00:00 on `dateStr`.
+ *
+ * Helsinki is +03:00 (EEST, summer) or +02:00 (EET, winter). Try EEST first:
+ * in summer it lands on local 00:00 (its Helsinki date equals dateStr); in
+ * winter the same +03:00 instant is 23:00 the PREVIOUS day, so its Helsinki
+ * date differs from dateStr and we fall through to EET. Local midnight always
+ * exists and is unambiguous (DST shifts happen at 03:00/04:00, never at
+ * midnight), so this single locale-date round-trip picks the right offset on
+ * every day — including the 23h spring-forward and 25h fall-back days.
  */
-export function getHelsinkiDateRange(dateStr: string): { start: Date; end: Date } {
-  // Find what UTC time corresponds to midnight Helsinki on dateStr.
-  // Helsinki is UTC+2 (EET) or UTC+3 (EEST).
-  // We try +02:00 first and verify by formatting back — if the date doesn't match,
-  // it must be summer time (+03:00).
-
-  // Try +02:00 first (winter time = EET)
-  const tryWinter = new Date(`${dateStr}T00:00:00+02:00`);
-  const tryWinterFormatted = tryWinter.toLocaleDateString('en-CA', { timeZone: 'Europe/Helsinki' });
-
-  let start: Date;
-  if (tryWinterFormatted === dateStr) {
-    // +02:00 is correct for this date
-    start = tryWinter;
-  } else {
-    // Must be summer time (+03:00 = EEST)
-    start = new Date(`${dateStr}T00:00:00+03:00`);
+function helsinkiMidnightUTC(dateStr: string): Date {
+  const summer = new Date(`${dateStr}T00:00:00+03:00`);
+  if (summer.toLocaleDateString('en-CA', { timeZone: 'Europe/Helsinki' }) === dateStr) {
+    return summer;
   }
-
-  // Same logic for the next day
-  const nextDate = new Date(start.getTime() + 24 * 60 * 60 * 1000);
-  const nextDateStr = nextDate.toLocaleDateString('en-CA', { timeZone: 'Europe/Helsinki' });
-
-  // The end might cross a DST boundary, so recalculate
-  const tryNextWinter = new Date(`${nextDateStr}T00:00:00+02:00`);
-  const tryNextWinterFormatted = tryNextWinter.toLocaleDateString('en-CA', { timeZone: 'Europe/Helsinki' });
-
-  let end: Date;
-  if (tryNextWinterFormatted === nextDateStr) {
-    end = tryNextWinter;
-  } else {
-    end = new Date(`${nextDateStr}T00:00:00+03:00`);
-  }
-
-  return { start, end };
+  return new Date(`${dateStr}T00:00:00+02:00`);
 }
 
 /**
- * Shift a YYYY-MM-DD string by a number of days.
+ * Given a YYYY-MM-DD string, returns UTC Date objects representing
+ * midnight-to-midnight in Helsinki time. The span is 23h on the spring-forward
+ * day and 25h on the fall-back day.
+ */
+export function getHelsinkiDateRange(dateStr: string): { start: Date; end: Date } {
+  return {
+    start: helsinkiMidnightUTC(dateStr),
+    end: helsinkiMidnightUTC(shiftDate(dateStr, 1)),
+  };
+}
+
+/**
+ * Shift a YYYY-MM-DD string by a number of whole calendar days.
+ *
+ * Calendar-day arithmetic is DST-immune: parse the bare date as UTC midnight
+ * and step the day field. Adding `days * 86_400_000` ms to a Helsinki-midnight
+ * instant instead drifts an hour across the 23h (spring-forward) and 25h
+ * (fall-back) days, landing on the wrong calendar date near those boundaries.
  */
 export function shiftDate(dateStr: string, days: number): string {
-  const { start } = getHelsinkiDateRange(dateStr);
-  const shifted = new Date(start.getTime() + days * 24 * 60 * 60 * 1000);
-  return shifted.toLocaleDateString('en-CA', { timeZone: 'Europe/Helsinki' });
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
 }
