@@ -1,6 +1,6 @@
 // Unit tests for getHelsinkiDateRange DST boundary handling (audit #1609)
 import { describe, it, expect } from 'vitest';
-import { getHelsinkiDateRange } from './prices.js';
+import { getHelsinkiDateRange } from '../utils/helsinki-time.js';
 
 /**
  * These tests pin the CURRENT behaviour of getHelsinkiDateRange and document,
