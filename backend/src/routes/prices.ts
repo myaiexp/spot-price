@@ -20,7 +20,7 @@ function getHelsinkiToday(): string {
  * Given a YYYY-MM-DD string, returns UTC Date objects representing
  * midnight-to-midnight in Helsinki time.
  */
-function getHelsinkiDateRange(dateStr: string): { start: Date; end: Date } {
+export function getHelsinkiDateRange(dateStr: string): { start: Date; end: Date } {
   // Find what UTC time corresponds to midnight Helsinki on dateStr.
   // Helsinki is UTC+2 (EET) or UTC+3 (EEST).
   // We try +02:00 first and verify by formatting back — if the date doesn't match,
