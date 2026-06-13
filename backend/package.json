@@ -17,7 +17,7 @@
     "dotenv": "^16.4.7",
     "drizzle-orm": "^0.39.3",
     "hono": "^4.7.5",
-    "pg": "^8.13.3"
+    "pg": "^8.21.0"
   },
   "devDependencies": {
     "@types/pg": "^8.11.11",
