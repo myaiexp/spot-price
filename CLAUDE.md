@@ -14,6 +14,7 @@
 
 ## Deploy
 
+- Port 3600 · `spot-price.service` · `spot-price-collector.timer` (every 15 min)
 - `git deployboth`
 
 ## Decisions from previous phases
