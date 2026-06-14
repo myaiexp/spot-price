@@ -6,6 +6,13 @@ import { prices } from './db/schema.js';
 
 export const ELECTRICITY_VAT = 0.255;
 
+/**
+ * Abort an upstream price-API request after this many ms. The payloads are small
+ * JSON, so a hung or stalled upstream — not a slow-but-progressing one — is the
+ * only thing this bound guards against; it stops collection from blocking forever.
+ */
+const FETCH_TIMEOUT_MS = 15_000;
+
 /** Convert EUR/MWh to EUR/kWh */
 export function mwhToKwh(eurPerMwh: number): number {
   return eurPerMwh / 1000;
@@ -25,6 +32,18 @@ interface SpotHintaSlot {
   PriceWithTax: number;
 }
 
+/**
+ * A slot is usable only if its DateTime is a non-empty string that parses to a
+ * real instant. The DateTime is the primary key in `prices`, so a missing or
+ * unparseable value from upstream would either be rejected by Postgres or, worse,
+ * silently coerced into a bad timestamp — so we screen it out before the upsert.
+ */
+function hasValidDateTime(slot: SpotHintaSlot): boolean {
+  return typeof slot.DateTime === 'string'
+    && slot.DateTime.length > 0
+    && !Number.isNaN(new Date(slot.DateTime).getTime());
+}
+
 // --- sahkotin.fi types & backfill ---
 
 interface SahkotinSlot {
@@ -39,7 +58,10 @@ interface SahkotinResponse {
 /** Fetch price data from sahkotin.fi for a date range */
 export async function fetchSahkotinPrices(start: string, end: string): Promise<SahkotinSlot[]> {
   const url = `https://sahkotin.fi/prices?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
-  const response = await fetch(url, { redirect: 'follow' });
+  const response = await fetch(url, {
+    redirect: 'follow',
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
 
   if (!response.ok) {
     throw new Error(`sahkotin.fi API error: ${response.status} ${response.statusText}`);
@@ -114,7 +136,9 @@ export async function backfillPrices(db: Db): Promise<{ totalUpserted: number }>
 }
 
 export async function collectPrices(db: Db): Promise<{ upserted: number }> {
-  const response = await fetch('https://api.spot-hinta.fi/TodayAndDayForward');
+  const response = await fetch('https://api.spot-hinta.fi/TodayAndDayForward', {
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
 
   if (!response.ok) {
     throw new Error(`spot-hinta.fi API error: ${response.status} ${response.statusText}`);
@@ -126,7 +150,21 @@ export async function collectPrices(db: Db): Promise<{ upserted: number }> {
     return { upserted: 0 };
   }
 
-  const values = slots.map((slot) => ({
+  // Drop any slot with a missing/unparseable DateTime so one malformed slot can't
+  // poison the batch. This mirrors how the collector already tolerates an
+  // empty/non-array response — skip the bad input rather than write garbage —
+  // and logs the count so upstream data issues stay visible.
+  const validSlots = slots.filter(hasValidDateTime);
+  const skipped = slots.length - validSlots.length;
+  if (skipped > 0) {
+    console.warn(`Skipped ${skipped} slot(s) with invalid DateTime from spot-hinta.fi`);
+  }
+
+  if (validSlots.length === 0) {
+    return { upserted: 0 };
+  }
+
+  const values = validSlots.map((slot) => ({
     datetime: slot.DateTime,
     priceNoTax: String(slot.PriceNoTax),
     priceWithTax: String(slot.PriceWithTax),
