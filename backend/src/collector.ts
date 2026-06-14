@@ -13,6 +13,16 @@ export const ELECTRICITY_VAT = 0.255;
  */
 const FETCH_TIMEOUT_MS = 15_000;
 
+/**
+ * Pause between consecutive sahkotin.fi backfill requests. This is a courtesy
+ * rate-limit, not a correctness requirement: a full backfill (Dec 2012 → today,
+ * ~30-day chunks) fires ~160 sequential requests at one a second, which keeps us
+ * a well-behaved client of a free third-party API. Lowering it would speed up
+ * large backfills but risks hammering / getting throttled by the upstream, so
+ * keep it conservative — the backfill is a rare, offline, one-shot job.
+ */
+const BACKFILL_REQUEST_DELAY_MS = 1000;
+
 /** Convert EUR/MWh to EUR/kWh */
 export function mwhToKwh(eurPerMwh: number): number {
   return eurPerMwh / 1000;
@@ -128,8 +138,8 @@ export async function backfillPrices(db: Db): Promise<{ totalUpserted: number }>
     end = start;
     chunkIndex++;
 
-    // Rate-limit: 1 second between requests
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    // Be polite to the upstream API between requests (see constant).
+    await new Promise((resolve) => setTimeout(resolve, BACKFILL_REQUEST_DELAY_MS));
   }
 
   return { totalUpserted };
