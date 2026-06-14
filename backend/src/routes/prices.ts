@@ -12,6 +12,16 @@ interface PriceSlot {
   priceWithTax: number;
 }
 
+// Matches a YYYY-MM-DD date string. Module-level so it is compiled once rather
+// than re-created on every /range request.
+const DATE_FORMAT_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+// Maximum span accepted by /range, in days (both endpoints inclusive).
+const MAX_RANGE_DAYS = 90;
+
+// Duration of a single price slot (15 minutes) in milliseconds.
+const SLOT_DURATION_MS = 15 * 60 * 1000;
+
 /**
  * Raw `prices` row as Drizzle infers it from the schema (NUMERIC/timestamp columns
  * come back as strings). Derived from `prices.$inferSelect` rather than hand-typed
@@ -115,7 +125,7 @@ export function pricesRoutes(db: Db): Hono {
       const slotStart = new Date(slot.datetime).getTime();
       const slotEnd = i < todaySlots.length - 1
         ? new Date(todaySlots[i + 1].datetime).getTime()
-        : slotStart + 15 * 60 * 1000;
+        : slotStart + SLOT_DURATION_MS;
       return nowMs >= slotStart && nowMs < slotEnd;
     });
 
@@ -161,8 +171,7 @@ export function pricesRoutes(db: Db): Hono {
     }
 
     // Validate date format
-    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-    if (!dateRegex.test(from) || !dateRegex.test(to)) {
+    if (!DATE_FORMAT_REGEX.test(from) || !DATE_FORMAT_REGEX.test(to)) {
       return c.json({ error: 'Dates must be in YYYY-MM-DD format' }, 400);
     }
 
@@ -185,10 +194,10 @@ export function pricesRoutes(db: Db): Hono {
       return c.json({ error: '"from" must be on or before "to" (YYYY-MM-DD)' }, 400);
     }
 
-    // Cap the span at 90 days (both endpoints inclusive).
+    // Cap the span at MAX_RANGE_DAYS (both endpoints inclusive).
     const daysDiff = Math.round((toRange.end.getTime() - fromRange.start.getTime()) / (24 * 60 * 60 * 1000));
-    if (daysDiff > 90) {
-      return c.json({ error: 'Date range cannot exceed 90 days' }, 400);
+    if (daysDiff > MAX_RANGE_DAYS) {
+      return c.json({ error: `Date range cannot exceed ${MAX_RANGE_DAYS} days` }, 400);
     }
 
     const rows = await db
