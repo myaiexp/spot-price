@@ -23,6 +23,41 @@ const FETCH_TIMEOUT_MS = 15_000;
  */
 const BACKFILL_REQUEST_DELAY_MS = 1000;
 
+/** Width of each backfill fetch window, in days. The loop walks backwards one of
+ * these at a time from today until sahkotin.fi runs out of history (Dec 2012). */
+const BACKFILL_CHUNK_DAYS = 30;
+
+/**
+ * Floor date used ONLY to size the runaway safety cap (see backfillMaxChunks).
+ * sahkotin.fi's real history starts in Dec 2012; this floor is deliberately set
+ * years earlier so the derived cap always sits comfortably above a legitimate
+ * full backfill and can never trip on real data.
+ */
+const BACKFILL_EPOCH_FLOOR_MS = Date.UTC(2010, 0, 1);
+
+/**
+ * Multiplier applied to the floor-to-today chunk count when sizing the safety
+ * cap. Pure headroom — the cap is a runaway guard, never a functional limit —
+ * so we double the already-generous floor-derived count.
+ */
+const BACKFILL_MAX_CHUNKS_SAFETY_FACTOR = 2;
+
+/**
+ * Upper bound on backfill chunk iterations for a run ending at `end`. This is a
+ * safety valve against a misbehaving upstream that returns non-empty (e.g.
+ * looping) data forever — NOT a functional limit. A legitimate backfill stops
+ * naturally when sahkotin.fi returns an empty chunk past the start of recorded
+ * history (Dec 2012); today that's ~165 chunks. We size the cap from a floor
+ * date set well before Dec 2012 and double it, so it always sits far above any
+ * real run (~400 today) and the headroom only widens as time passes — both the
+ * real count and the cap grow from "today", but the floor sits years earlier.
+ */
+export function backfillMaxChunks(end: Date): number {
+  const chunkMs = BACKFILL_CHUNK_DAYS * 24 * 60 * 60 * 1000;
+  const chunksToFloor = Math.ceil((end.getTime() - BACKFILL_EPOCH_FLOOR_MS) / chunkMs);
+  return chunksToFloor * BACKFILL_MAX_CHUNKS_SAFETY_FACTOR;
+}
+
 /** Convert EUR/MWh to EUR/kWh */
 export function mwhToKwh(eurPerMwh: number): number {
   return eurPerMwh / 1000;
@@ -81,10 +116,21 @@ export async function fetchSahkotinPrices(start: string, end: string): Promise<S
   return data.prices ?? [];
 }
 
-/** Backfill all available historical data from sahkotin.fi */
-export async function backfillPrices(db: Db): Promise<{ totalUpserted: number }> {
+/**
+ * Backfill all available historical data from sahkotin.fi.
+ *
+ * `opts` exists only to give tests a seam over the two values that otherwise
+ * depend on wall-clock / upstream timing — `maxChunks` (the safety cap) and
+ * `requestDelayMs` (the inter-request pause). Both default to the production
+ * values, so a normal `backfillPrices(db)` call behaves exactly as before.
+ */
+export async function backfillPrices(
+  db: Db,
+  opts: { maxChunks?: number; requestDelayMs?: number } = {},
+): Promise<{ totalUpserted: number }> {
   let totalUpserted = 0;
-  const chunkDays = 30;
+  const chunkDays = BACKFILL_CHUNK_DAYS;
+  const requestDelayMs = opts.requestDelayMs ?? BACKFILL_REQUEST_DELAY_MS;
 
   // `end` is today's UTC midnight, used as the EXCLUSIVE upper bound of the fetch
   // window — so the most recent slot fetched is yesterday's last hour (today 00:00Z
@@ -97,7 +143,22 @@ export async function backfillPrices(db: Db): Promise<{ totalUpserted: number }>
 
   let chunkIndex = 0;
 
+  // Safety valve: a legitimate backfill terminates when the upstream returns an
+  // empty chunk past Dec 2012. If it never does (looping/garbage upstream data),
+  // stop and throw rather than spin forever. The bound is sized far above any
+  // real run (see backfillMaxChunks), so hitting it always signals a fault.
+  const maxChunks = opts.maxChunks ?? backfillMaxChunks(end);
+
   while (true) {
+    if (chunkIndex >= maxChunks) {
+      throw new Error(
+        `backfillPrices aborted: hit the ${maxChunks}-chunk safety cap without an empty ` +
+        `upstream response. A legitimate full backfill (sahkotin.fi history starts Dec 2012) ` +
+        `stays well below this bound, so a non-terminating loop here means the upstream is ` +
+        `returning unexpected/looping data — refusing to run away.`,
+      );
+    }
+
     const start = new Date(end.getTime() - chunkDays * 24 * 60 * 60 * 1000);
 
     console.log(`Chunk ${chunkIndex + 1}: ${start.toISOString()} → ${end.toISOString()}`);
@@ -139,7 +200,7 @@ export async function backfillPrices(db: Db): Promise<{ totalUpserted: number }>
     chunkIndex++;
 
     // Be polite to the upstream API between requests (see constant).
-    await new Promise((resolve) => setTimeout(resolve, BACKFILL_REQUEST_DELAY_MS));
+    await new Promise((resolve) => setTimeout(resolve, requestDelayMs));
   }
 
   return { totalUpserted };
