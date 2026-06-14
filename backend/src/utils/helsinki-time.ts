@@ -56,6 +56,31 @@ export function getHelsinkiDateRange(dateStr: string): { start: Date; end: Date 
 }
 
 /**
+ * Minutes-since-midnight of an instant on Helsinki's wall clock (0..1439).
+ *
+ * An explicit, deterministic timezone-aware key for "same time-of-day in
+ * Helsinki" comparisons — preferred over comparing formatted HH:MM strings,
+ * which carry locale fragility (e.g. `hour12:false` rendering midnight as
+ * "24:00" on some ICU builds) and are stringly-typed. Reads the hour/minute
+ * parts in Europe/Helsinki and normalises a "24" hour to 0 so midnight is 0.
+ *
+ * NOTE: this is wall-clock-of-day, so on the fall-back day two distinct instants
+ * (EEST then EET) share a key — callers matching on it resolve such ties
+ * themselves (e.g. first-match = earliest instant).
+ */
+export function helsinkiMinutesOfDay(date: Date): number {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Helsinki',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(date);
+  const hour = Number(parts.find((p) => p.type === 'hour')?.value) % 24;
+  const minute = Number(parts.find((p) => p.type === 'minute')?.value);
+  return hour * 60 + minute;
+}
+
+/**
  * Shift a YYYY-MM-DD string by a number of whole calendar days.
  *
  * Calendar-day arithmetic is DST-immune: parse the bare date as UTC midnight

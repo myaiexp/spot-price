@@ -3,7 +3,7 @@ import { Hono } from 'hono';
 import { gte, lt, and, asc } from 'drizzle-orm';
 import type { Db } from '../db/connection.js';
 import { prices } from '../db/schema.js';
-import { getHelsinkiToday, getHelsinkiDateRange, shiftDate, isValidCalendarDate } from '../utils/helsinki-time.js';
+import { getHelsinkiToday, getHelsinkiDateRange, shiftDate, isValidCalendarDate, helsinkiMinutesOfDay } from '../utils/helsinki-time.js';
 import { createHeatmap } from '../queries/heatmap.js';
 
 interface PriceSlot {
@@ -120,29 +120,26 @@ export function pricesRoutes(db: Db): Hono {
     const cheaperCount = todaySlots.filter(s => s.priceWithTax < currentSlot.priceWithTax).length;
     const percentile = Math.round((cheaperCount / todaySlots.length) * 100);
 
-    // Find yesterday's slot at the same time-of-day
+    // Find yesterday's slot at the same Helsinki WALL-CLOCK time-of-day.
+    //
+    // Semantics are deliberately wall-clock, not 24h-ago (UTC instant): for spot
+    // prices "yesterday at this time" means the same local hour (peaks are
+    // wall-clock-anchored), and the whole codebase keys days by Helsinki local
+    // time. Matching is on an explicit minutes-of-day key (helsinkiMinutesOfDay)
+    // rather than a formatted local-time string, which makes it deterministic and
+    // free of locale/ICU string quirks. Consequences near DST, both intentional:
+    //   - spring-forward: a current time that didn't exist yesterday (the skipped
+    //     03:00–04:00 hour) has no match -> null, rather than silently surfacing a
+    //     different hour.
+    //   - fall-back: yesterday repeats the wall-clock hour, so two instants share
+    //     the key; find() returns the first (earliest) deterministically.
     const yesterday = shiftDate(today, -1);
     const yesterdaySlots = await getSlotsForDate(db, yesterday);
 
-    // Match by same time-of-day: extract hours and minutes from Helsinki time
-    const currentDt = new Date(currentSlot.datetime);
-    const currentHelsinkiTime = currentDt.toLocaleTimeString('en-GB', {
-      timeZone: 'Europe/Helsinki',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    });
-
-    const yesterdaySlot = yesterdaySlots.find((slot) => {
-      const slotDt = new Date(slot.datetime);
-      const slotHelsinkiTime = slotDt.toLocaleTimeString('en-GB', {
-        timeZone: 'Europe/Helsinki',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-      });
-      return slotHelsinkiTime === currentHelsinkiTime;
-    }) ?? null;
+    const currentMinutes = helsinkiMinutesOfDay(new Date(currentSlot.datetime));
+    const yesterdaySlot = yesterdaySlots.find(
+      (slot) => helsinkiMinutesOfDay(new Date(slot.datetime)) === currentMinutes,
+    ) ?? null;
 
     return c.json({ slot: currentSlot, percentile, yesterdaySlot });
   });
