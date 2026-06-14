@@ -9,7 +9,7 @@ export function main(): void {
     throw new Error('DATABASE_URL environment variable is required');
   }
 
-  const port = parseInt(process.env.API_PORT || '3500', 10);
+  const port = parseInt(process.env.API_PORT || '3600', 10);
   const db = createDb(databaseUrl);
   const app = createApp(db);
 
