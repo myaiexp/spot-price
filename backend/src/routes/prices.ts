@@ -13,13 +13,20 @@ interface PriceSlot {
 }
 
 /**
+ * Raw `prices` row as Drizzle infers it from the schema (NUMERIC/timestamp columns
+ * come back as strings). Derived from `prices.$inferSelect` rather than hand-typed
+ * so a schema column rename or type change is caught here at compile time.
+ */
+type PriceRow = typeof prices.$inferSelect;
+
+/**
  * Convert a raw Drizzle row (with string numerics) to a PriceSlot, or null when a
  * numeric column fails to parse. node-postgres returns NUMERIC columns as strings;
  * a NULL or malformed value makes parseFloat return NaN, which JSON-serialises to
  * null and would silently corrupt the response. Such a row is unusable for
  * charting/cost, so it is dropped (see mapSlots) rather than emitting NaN.
  */
-function toSlot(row: { datetime: string; priceNoTax: string; priceWithTax: string }): PriceSlot | null {
+function toSlot(row: PriceRow): PriceSlot | null {
   const priceNoTax = parseFloat(row.priceNoTax);
   const priceWithTax = parseFloat(row.priceWithTax);
   if (Number.isNaN(priceNoTax) || Number.isNaN(priceWithTax)) {
@@ -36,7 +43,7 @@ function toSlot(row: { datetime: string; priceNoTax: string; priceWithTax: strin
  * Map raw rows to PriceSlots, dropping any row that fails numeric conversion so
  * no NaN reaches the response. Well-formed rows pass through unchanged.
  */
-function mapSlots(rows: Array<{ datetime: string; priceNoTax: string; priceWithTax: string }>): PriceSlot[] {
+function mapSlots(rows: PriceRow[]): PriceSlot[] {
   return rows.flatMap((row) => {
     const slot = toSlot(row);
     return slot ? [slot] : [];

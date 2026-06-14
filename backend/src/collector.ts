@@ -4,6 +4,15 @@ import { prices } from './db/schema.js';
 
 // --- Constants & conversion helpers ---
 
+/**
+ * External price-API endpoints, grouped here so every upstream dependency is
+ * visible in one place. spot-hinta.fi serves the live today+tomorrow 15-min
+ * slots (polled every 15 min by collectPrices); sahkotin.fi serves the historical
+ * hourly series used by the one-shot backfill (fetchSahkotinPrices / backfillPrices).
+ */
+const SPOT_HINTA_TODAY_URL = 'https://api.spot-hinta.fi/TodayAndDayForward';
+const SAHKOTIN_PRICES_URL = 'https://sahkotin.fi/prices';
+
 export const ELECTRICITY_VAT = 0.255;
 
 /**
@@ -137,7 +146,7 @@ interface SahkotinResponse {
 
 /** Fetch price data from sahkotin.fi for a date range */
 export async function fetchSahkotinPrices(start: string, end: string): Promise<SahkotinSlot[]> {
-  const url = `https://sahkotin.fi/prices?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
+  const url = `${SAHKOTIN_PRICES_URL}?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
   const response = await fetch(url, {
     redirect: 'follow',
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
@@ -242,7 +251,7 @@ export async function backfillPrices(
 }
 
 export async function collectPrices(db: Db): Promise<{ upserted: number }> {
-  const response = await fetch('https://api.spot-hinta.fi/TodayAndDayForward', {
+  const response = await fetch(SPOT_HINTA_TODAY_URL, {
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
 
