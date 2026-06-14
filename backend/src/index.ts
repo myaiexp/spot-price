@@ -18,4 +18,15 @@ export function main(): void {
   });
 }
 
-main();
+// Server entry point: run directly with `node dist/index.js` (prod) or
+// `tsx src/index.ts` (dev). Guarded so importing this module (e.g. for tests)
+// does not trigger startup side-effects.
+import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
+
+const currentFile = fileURLToPath(import.meta.url);
+const isMainModule = process.argv[1] && resolve(process.argv[1]) === currentFile;
+
+if (isMainModule) {
+  main();
+}
