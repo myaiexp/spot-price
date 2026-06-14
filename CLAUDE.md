@@ -15,7 +15,7 @@
 ## Deploy
 
 - Port 3600 · `spot-price.service` · `spot-price-collector.timer` (every 15 min)
-- `git deployboth`
+- `deploy` — pushes to forgejo + restarts `spot-price.service` (the collector is timer-driven and picks up new code on its next fire)
 
 ## Decisions from previous phases
 
