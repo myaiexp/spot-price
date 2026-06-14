@@ -149,17 +149,22 @@ export function pricesRoutes(db: Db): Hono {
       return c.json({ error: 'Dates must be valid calendar dates (YYYY-MM-DD)' }, 400);
     }
 
-    // Check max 90 days
     const fromRange = getHelsinkiDateRange(from);
     const toRange = getHelsinkiDateRange(to);
-    const daysDiff = Math.round((toRange.end.getTime() - fromRange.start.getTime()) / (24 * 60 * 60 * 1000));
 
-    if (daysDiff > 90) {
-      return c.json({ error: 'Date range cannot exceed 90 days' }, 400);
+    // `to` is inclusive: toRange.end is midnight at the START of the day after
+    // `to`, so the whole `to` day falls in range. fromRange.start >= toRange.end
+    // therefore means from is strictly AFTER to (a reversed range) — reject it.
+    // from === to is intentionally allowed: it is a valid single-day query, not
+    // an error or an empty result (audit #3131).
+    if (fromRange.start >= toRange.end) {
+      return c.json({ error: '"from" must be on or before "to" (YYYY-MM-DD)' }, 400);
     }
 
-    if (fromRange.start >= toRange.end) {
-      return c.json({ error: '"from" must be before "to"' }, 400);
+    // Cap the span at 90 days (both endpoints inclusive).
+    const daysDiff = Math.round((toRange.end.getTime() - fromRange.start.getTime()) / (24 * 60 * 60 * 1000));
+    if (daysDiff > 90) {
+      return c.json({ error: 'Date range cannot exceed 90 days' }, 400);
     }
 
     const rows = await db
