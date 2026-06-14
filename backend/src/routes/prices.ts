@@ -13,14 +13,34 @@ interface PriceSlot {
 }
 
 /**
- * Convert a raw Drizzle row (with string numerics) to a PriceSlot.
+ * Convert a raw Drizzle row (with string numerics) to a PriceSlot, or null when a
+ * numeric column fails to parse. node-postgres returns NUMERIC columns as strings;
+ * a NULL or malformed value makes parseFloat return NaN, which JSON-serialises to
+ * null and would silently corrupt the response. Such a row is unusable for
+ * charting/cost, so it is dropped (see mapSlots) rather than emitting NaN.
  */
-function toSlot(row: { datetime: string; priceNoTax: string; priceWithTax: string }): PriceSlot {
+function toSlot(row: { datetime: string; priceNoTax: string; priceWithTax: string }): PriceSlot | null {
+  const priceNoTax = parseFloat(row.priceNoTax);
+  const priceWithTax = parseFloat(row.priceWithTax);
+  if (Number.isNaN(priceNoTax) || Number.isNaN(priceWithTax)) {
+    return null;
+  }
   return {
     datetime: new Date(row.datetime).toISOString(),
-    priceNoTax: parseFloat(row.priceNoTax),
-    priceWithTax: parseFloat(row.priceWithTax),
+    priceNoTax,
+    priceWithTax,
   };
+}
+
+/**
+ * Map raw rows to PriceSlots, dropping any row that fails numeric conversion so
+ * no NaN reaches the response. Well-formed rows pass through unchanged.
+ */
+function mapSlots(rows: Array<{ datetime: string; priceNoTax: string; priceWithTax: string }>): PriceSlot[] {
+  return rows.flatMap((row) => {
+    const slot = toSlot(row);
+    return slot ? [slot] : [];
+  });
 }
 
 /**
@@ -35,7 +55,7 @@ async function getSlotsForDate(db: Db, dateStr: string): Promise<PriceSlot[]> {
     .where(and(gte(prices.datetime, start.toISOString()), lt(prices.datetime, end.toISOString())))
     .orderBy(asc(prices.datetime));
 
-  return rows.map(toSlot);
+  return mapSlots(rows);
 }
 
 export function pricesRoutes(db: Db): Hono {
@@ -176,7 +196,7 @@ export function pricesRoutes(db: Db): Hono {
       ))
       .orderBy(asc(prices.datetime));
 
-    const slots = rows.map(toSlot);
+    const slots = mapSlots(rows);
 
     return c.json({ slots, from, to });
   });
