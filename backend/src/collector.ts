@@ -58,6 +58,41 @@ export function backfillMaxChunks(end: Date): number {
   return chunksToFloor * BACKFILL_MAX_CHUNKS_SAFETY_FACTOR;
 }
 
+/**
+ * Max length of an upstream HTTP statusText we'll echo into a log/error message.
+ * A legitimate reason phrase ("Internal Server Error", "Service Unavailable") is
+ * well under this; the bound stops a hostile/garbage upstream from flooding logs.
+ */
+const MAX_STATUS_TEXT_LEN = 100;
+
+/**
+ * Sanitize an upstream-controlled HTTP statusText before it enters an error or
+ * log message. The reason phrase is copied verbatim from the upstream response
+ * line, so treat it as untrusted: replace every control character — C0 (incl.
+ * CR/LF/TAB, which could forge or split log lines), DEL, and C1 — with a space,
+ * collapse the resulting runs, and bound the length. Returns '' when nothing
+ * printable survives, so callers can drop it and keep just the status code.
+ */
+export function sanitizeStatusText(statusText: string): string {
+  let out = '';
+  for (const ch of statusText) {
+    const code = ch.codePointAt(0) ?? 0;
+    const isControl = code < 0x20 || (code >= 0x7f && code <= 0x9f);
+    out += isControl ? ' ' : ch;
+  }
+  return out.replace(/ +/g, ' ').trim().slice(0, MAX_STATUS_TEXT_LEN);
+}
+
+/**
+ * Format an upstream HTTP failure into a safe, bounded error suffix. Keeps the
+ * status CODE verbatim (the useful diagnostic) and appends the statusText only
+ * after sanitizing it — so upstream-controlled text can't inject into logs.
+ */
+function httpErrorDetail(response: Response): string {
+  const detail = sanitizeStatusText(response.statusText);
+  return detail ? `${response.status} ${detail}` : String(response.status);
+}
+
 /** Convert EUR/MWh to EUR/kWh */
 export function mwhToKwh(eurPerMwh: number): number {
   return eurPerMwh / 1000;
@@ -109,7 +144,7 @@ export async function fetchSahkotinPrices(start: string, end: string): Promise<S
   });
 
   if (!response.ok) {
-    throw new Error(`sahkotin.fi API error: ${response.status} ${response.statusText}`);
+    throw new Error(`sahkotin.fi API error: ${httpErrorDetail(response)}`);
   }
 
   const data: SahkotinResponse = await response.json();
@@ -212,7 +247,7 @@ export async function collectPrices(db: Db): Promise<{ upserted: number }> {
   });
 
   if (!response.ok) {
-    throw new Error(`spot-hinta.fi API error: ${response.status} ${response.statusText}`);
+    throw new Error(`spot-hinta.fi API error: ${httpErrorDetail(response)}`);
   }
 
   const slots: SpotHintaSlot[] = await response.json();
