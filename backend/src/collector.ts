@@ -54,7 +54,12 @@ export async function backfillPrices(db: Db): Promise<{ totalUpserted: number }>
   let totalUpserted = 0;
   const chunkDays = 30;
 
-  // Start from yesterday, work backwards
+  // `end` is today's UTC midnight, used as the EXCLUSIVE upper bound of the fetch
+  // window — so the most recent slot fetched is yesterday's last hour (today 00:00Z
+  // is excluded). This intentionally backfills up through yesterday and works
+  // backwards; today/tomorrow are owned by the live collectPrices job (spot-hinta.fi
+  // TodayAndDayForward, every 15 min). Do NOT subtract a day from `end` — that would
+  // drop most of yesterday's data, since the bound is a precise instant, not a date.
   const now = new Date();
   let end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 
