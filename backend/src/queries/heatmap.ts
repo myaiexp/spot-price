@@ -7,21 +7,36 @@ const DAY_LABELS = ['Ma', 'Ti', 'Ke', 'To', 'Pe', 'La', 'Su'];
 
 const HEATMAP_TTL = 15 * 60 * 1000;
 
+/** One weekday row of the heatmap: 24 hourly cells in cents/kWh (null = no data yet). */
+export interface HeatmapDay {
+  day: number; // 0 = Mon … 6 = Sun
+  label: string; // Finnish weekday abbreviation
+  hours: Array<number | null>; // length 24; cents/kWh rounded to 2dp, null when no data
+}
+
+/** Response shape returned by getHeatmap and the GET /heatmap route. */
+export interface HeatmapResponse {
+  matrix: HeatmapDay[]; // 7 days × 24 hours, Monday first
+  minPrice: number; // lowest populated cell, cents/kWh (0 when no data)
+  maxPrice: number; // highest populated cell, cents/kWh (0 when no data)
+  weekNumber: number; // ISO week number (Helsinki)
+}
+
 /**
  * Create a heatmap query bound to its own 15-minute cache. Each call returns an
  * independent getHeatmap closure so separate app instances — and successive
  * tests — never share cached data; a module-level cache previously leaked one
  * app's rows into the next regardless of its DB.
  */
-export function createHeatmap(): (db: Db) => Promise<unknown> {
+export function createHeatmap(): (db: Db) => Promise<HeatmapResponse> {
   // In-memory heatmap cache with 15-min TTL, private to this closure.
-  let heatmapCache: { data: unknown; timestamp: number } | null = null;
+  let heatmapCache: { data: HeatmapResponse; timestamp: number } | null = null;
 
   /**
    * Build the current week's hourly prices as a 7×24 grid (Helsinki time).
    * Cached in-memory for 15 minutes.
    */
-  return async function getHeatmap(db: Db): Promise<unknown> {
+  return async function getHeatmap(db: Db): Promise<HeatmapResponse> {
     // Check cache
     if (heatmapCache && Date.now() - heatmapCache.timestamp < HEATMAP_TTL) {
       return heatmapCache.data;
@@ -32,7 +47,7 @@ export function createHeatmap(): (db: Db) => Promise<unknown> {
       SELECT
         EXTRACT(ISODOW FROM datetime AT TIME ZONE 'Europe/Helsinki')::int AS weekday,
         EXTRACT(HOUR FROM datetime AT TIME ZONE 'Europe/Helsinki')::int AS hour,
-        AVG(price_with_tax::float) AS avg_price
+        AVG(price_with_tax) AS avg_price
       FROM prices
       WHERE datetime AT TIME ZONE 'Europe/Helsinki'
         >= date_trunc('week', NOW() AT TIME ZONE 'Europe/Helsinki')
@@ -42,11 +57,17 @@ export function createHeatmap(): (db: Db) => Promise<unknown> {
       ORDER BY weekday, hour
     `);
 
-    // Build lookup
+    // Build lookup. AVG is computed in exact NUMERIC in SQL (no lossy ::float
+    // cast); node-postgres hands NUMERIC back as a string, so the conversion to
+    // a JS number happens here at the boundary. A malformed/NaN average (never
+    // expected: price_with_tax is NOT NULL and each group has ≥1 row) is skipped
+    // rather than poisoning the grid with NaN.
     const cellValues = new Map<string, number>();
-    for (const row of rows.rows as Array<{ weekday: number; hour: number; avg_price: number }>) {
+    for (const row of rows.rows as Array<{ weekday: number; hour: number; avg_price: string }>) {
+      const avgPrice = parseFloat(row.avg_price);
+      if (Number.isNaN(avgPrice)) continue;
       const weekday = row.weekday - 1; // ISODOW 1=Mon → 0
-      cellValues.set(`${weekday}-${row.hour}`, row.avg_price);
+      cellValues.set(`${weekday}-${row.hour}`, avgPrice);
     }
 
     // Current Helsinki weekday (0=Mon) and hour for the frontend to know what's "future"
