@@ -11,6 +11,11 @@ export function createApp(db: Db): Hono {
     origin: ['https://mase.fi', 'http://localhost:5173'],
   }));
 
+  app.onError((err, c) => {
+    console.error('[error]', err);
+    return c.json({ error: 'Internal Server Error' }, 500);
+  });
+
   app.get('/api/health', (c) => c.json({ status: 'ok' }));
 
   app.post('/api/collect', async (c) => {
