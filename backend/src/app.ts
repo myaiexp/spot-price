@@ -1,14 +1,20 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { secureHeaders } from 'hono/secure-headers';
 import type { Db } from './db/connection.js';
 import { pricesRoutes } from './routes/prices.js';
-import { collectPrices } from './collector.js';
 
 export function createApp(db: Db): Hono {
   const app = new Hono();
 
+  app.use('*', secureHeaders());
+
+  // Dev origin is excluded in production to prevent cross-origin requests from
+  // local dev servers hitting the live API.
   app.use('*', cors({
-    origin: ['https://mase.fi', 'http://localhost:5173'],
+    origin: process.env.NODE_ENV === 'production'
+      ? ['https://mase.fi']
+      : ['https://mase.fi', 'http://localhost:5173'],
   }));
 
   app.onError((err, c) => {
@@ -17,11 +23,6 @@ export function createApp(db: Db): Hono {
   });
 
   app.get('/api/health', (c) => c.json({ status: 'ok' }));
-
-  app.post('/api/collect', async (c) => {
-    const result = await collectPrices(db);
-    return c.json(result);
-  });
 
   app.route('/api/prices', pricesRoutes(db));
 

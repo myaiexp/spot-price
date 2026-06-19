@@ -122,15 +122,23 @@ interface SpotHintaSlot {
 }
 
 /**
- * A slot is usable only if its DateTime is a non-empty string that parses to a
- * real instant. The DateTime is the primary key in `prices`, so a missing or
- * unparseable value from upstream would either be rejected by Postgres or, worse,
- * silently coerced into a bad timestamp — so we screen it out before the upsert.
+ * Runtime type guard for spot-hinta.fi slots. Checks all fields we write to the
+ * DB: DateTime must be a non-empty string that parses to a real instant (it is
+ * the primary key in `prices`), and both price fields must be finite numbers (a
+ * missing or NaN price would write "undefined" / "NaN" into NUMERIC columns).
  */
-function hasValidDateTime(slot: SpotHintaSlot): boolean {
-  return typeof slot.DateTime === 'string'
-    && slot.DateTime.length > 0
-    && !Number.isNaN(new Date(slot.DateTime).getTime());
+function isValidSpotHintaSlot(slot: unknown): slot is SpotHintaSlot {
+  if (typeof slot !== 'object' || slot === null) return false;
+  const s = slot as Record<string, unknown>;
+  return (
+    typeof s.DateTime === 'string' &&
+    s.DateTime.length > 0 &&
+    !Number.isNaN(new Date(s.DateTime).getTime()) &&
+    typeof s.PriceNoTax === 'number' &&
+    Number.isFinite(s.PriceNoTax) &&
+    typeof s.PriceWithTax === 'number' &&
+    Number.isFinite(s.PriceWithTax)
+  );
 }
 
 // --- sahkotin.fi types & backfill ---
@@ -140,8 +148,11 @@ interface SahkotinSlot {
   value: number;  // EUR/MWh, no tax
 }
 
-interface SahkotinResponse {
-  prices: SahkotinSlot[];
+/** Runtime type guard for sahkotin.fi price slots */
+function isSahkotinSlot(slot: unknown): slot is SahkotinSlot {
+  if (typeof slot !== 'object' || slot === null) return false;
+  const s = slot as Record<string, unknown>;
+  return typeof s.date === 'string' && typeof s.value === 'number' && Number.isFinite(s.value);
 }
 
 /** Fetch price data from sahkotin.fi for a date range */
@@ -156,8 +167,11 @@ export async function fetchSahkotinPrices(start: string, end: string): Promise<S
     throw new Error(`sahkotin.fi API error: ${httpErrorDetail(response)}`);
   }
 
-  const data: SahkotinResponse = await response.json();
-  return data.prices ?? [];
+  const raw: unknown = await response.json();
+  if (typeof raw !== 'object' || raw === null) return [];
+  const data = raw as Record<string, unknown>;
+  if (!Array.isArray(data.prices)) return [];
+  return (data.prices as unknown[]).filter(isSahkotinSlot);
 }
 
 /**
@@ -259,20 +273,18 @@ export async function collectPrices(db: Db): Promise<{ upserted: number }> {
     throw new Error(`spot-hinta.fi API error: ${httpErrorDetail(response)}`);
   }
 
-  const slots: SpotHintaSlot[] = await response.json();
+  const raw: unknown = await response.json();
 
-  if (!Array.isArray(slots) || slots.length === 0) {
+  if (!Array.isArray(raw) || raw.length === 0) {
     return { upserted: 0 };
   }
 
-  // Drop any slot with a missing/unparseable DateTime so one malformed slot can't
-  // poison the batch. This mirrors how the collector already tolerates an
-  // empty/non-array response — skip the bad input rather than write garbage —
-  // and logs the count so upstream data issues stay visible.
-  const validSlots = slots.filter(hasValidDateTime);
-  const skipped = slots.length - validSlots.length;
+  // Drop any slot that fails runtime validation so malformed upstream data can't
+  // poison the batch. Logs the count so upstream data quality issues stay visible.
+  const validSlots = raw.filter(isValidSpotHintaSlot);
+  const skipped = raw.length - validSlots.length;
   if (skipped > 0) {
-    console.warn(`Skipped ${skipped} slot(s) with invalid DateTime from spot-hinta.fi`);
+    console.warn(`Skipped ${skipped} slot(s) with invalid fields from spot-hinta.fi`);
   }
 
   if (validSlots.length === 0) {
