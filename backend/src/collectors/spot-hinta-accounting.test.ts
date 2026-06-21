@@ -3,8 +3,8 @@
 // so the result must expose a single `upserted` count — not a fabricated
 // inserted/updated split that always reported every affected row as an insert.
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { collectPrices } from './collector.js';
-import type { Db } from './db/connection.js';
+import { collectPrices } from './spot-hinta.js';
+import type { Db } from '../db/connection.js';
 
 // spot-hinta.fi TodayAndDayForward slots (subset of fields collectPrices reads).
 function makeSlots(n: number) {

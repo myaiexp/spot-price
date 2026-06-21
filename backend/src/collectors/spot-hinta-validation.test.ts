@@ -3,8 +3,8 @@
 // missing/empty/unparseable value from upstream must be skipped — not written —
 // and the skip must be visible (logged) without poisoning the rest of the batch.
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { collectPrices } from './collector.js';
-import type { Db } from './db/connection.js';
+import { collectPrices } from './spot-hinta.js';
+import type { Db } from '../db/connection.js';
 
 // A valid spot-hinta.fi slot with a parseable DateTime.
 function goodSlot(i: number) {

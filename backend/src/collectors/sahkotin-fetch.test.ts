@@ -6,7 +6,7 @@
 // (or with prices: null) degrades to [] instead of leaking undefined to callers
 // — backfillPrices reads [] as "no more history" and stops cleanly.
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { fetchSahkotinPrices } from './collector.js';
+import { fetchSahkotinPrices } from './sahkotin.js';
 
 function stubOkFetch(body: unknown) {
   const fetchMock = vi.fn(async () => ({

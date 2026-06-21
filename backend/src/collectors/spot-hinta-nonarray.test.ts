@@ -6,8 +6,8 @@
 // accounting test covers the empty-array branch (length 0); this covers the
 // other half of the guard: a body that is not an array at all.
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { collectPrices } from './collector.js';
-import type { Db } from './db/connection.js';
+import { collectPrices } from './spot-hinta.js';
+import type { Db } from '../db/connection.js';
 
 function stubFetch(body: unknown) {
   vi.stubGlobal(

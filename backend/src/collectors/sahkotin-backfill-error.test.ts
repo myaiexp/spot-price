@@ -6,8 +6,8 @@
 // history ran out, or spinning), whether it fails on the very first chunk or
 // after earlier chunks already succeeded.
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { backfillPrices } from './collector.js';
-import type { Db } from './db/connection.js';
+import { backfillPrices } from './sahkotin.js';
+import type { Db } from '../db/connection.js';
 
 const okJson = (body: unknown) => ({ ok: true, status: 200, statusText: 'OK', json: async () => body });
 const failed = (status: number, statusText: string) => ({ ok: false, status, statusText, json: async () => ({}) });

@@ -4,8 +4,8 @@
 // must abort the loop and throw — without changing normal termination, and with
 // a bound sized far above any legitimate full backfill.
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { backfillPrices, backfillMaxChunks } from './collector.js';
-import type { Db } from './db/connection.js';
+import { backfillPrices, backfillMaxChunks } from './sahkotin.js';
+import type { Db } from '../db/connection.js';
 
 // A fetch Response stand-in whose json() yields `body`.
 const okJson = (body: unknown) => ({ ok: true, status: 200, statusText: 'OK', json: async () => body });

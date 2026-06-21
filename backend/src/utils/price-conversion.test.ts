@@ -6,7 +6,7 @@
 // so a regression in either operation or in the VAT constant fails here in
 // isolation rather than deep inside a DB-level test.
 import { describe, it, expect } from 'vitest';
-import { mwhToKwh, applyVat, ELECTRICITY_VAT } from './collector.js';
+import { mwhToKwh, applyVat, ELECTRICITY_VAT } from './price-conversion.js';
 
 describe('mwhToKwh (audit #3966)', () => {
   it('divides EUR/MWh by 1000 to get EUR/kWh', () => {
