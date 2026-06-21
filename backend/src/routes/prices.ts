@@ -36,7 +36,7 @@ type PriceRow = typeof prices.$inferSelect;
  * null and would silently corrupt the response. Such a row is unusable for
  * charting/cost, so it is dropped (see mapSlots) rather than emitting NaN.
  */
-function toSlot(row: PriceRow): PriceSlot | null {
+function rowToPriceSlot(row: PriceRow): PriceSlot | null {
   const priceNoTax = parseFloat(row.priceNoTax);
   const priceWithTax = parseFloat(row.priceWithTax);
   if (Number.isNaN(priceNoTax) || Number.isNaN(priceWithTax)) {
@@ -55,17 +55,17 @@ function toSlot(row: PriceRow): PriceSlot | null {
  */
 function mapSlots(rows: PriceRow[]): PriceSlot[] {
   return rows.flatMap((row) => {
-    const slot = toSlot(row);
+    const slot = rowToPriceSlot(row);
     return slot ? [slot] : [];
   });
 }
 
 /**
- * Query all price slots for a given YYYY-MM-DD date (Helsinki timezone day).
+ * Query price slots for an arbitrary [start, end) UTC window — the base
+ * primitive both the single-day helper and the /range route delegate to, so the
+ * ORM query and row mapping live in exactly one place.
  */
-async function getSlotsForDate(db: Db, dateStr: string): Promise<PriceSlot[]> {
-  const { start, end } = getHelsinkiDateRange(dateStr);
-
+async function getSlotsForRange(db: Db, start: Date, end: Date): Promise<PriceSlot[]> {
   const rows = await db
     .select()
     .from(prices)
@@ -75,38 +75,49 @@ async function getSlotsForDate(db: Db, dateStr: string): Promise<PriceSlot[]> {
   return mapSlots(rows);
 }
 
+// Price slots for a YYYY-MM-DD Helsinki-timezone day.
+async function getSlotsForDate(db: Db, dateStr: string): Promise<PriceSlot[]> {
+  const { start, end } = getHelsinkiDateRange(dateStr);
+  return getSlotsForRange(db, start, end);
+}
+
+/**
+ * Register a day-scoped GET route (/today, /yesterday, /tomorrow) at the given
+ * offset from Helsinki "today". When `emptyError` is set, an empty result yields
+ * a 404 with that message (used by /tomorrow, whose data isn't published until
+ * ~14:00); otherwise an empty day is a valid 200 with an empty slots array.
+ */
+function registerDayRoute(router: Hono, db: Db, path: string, offset: number, emptyError?: string): void {
+  router.get(path, async (c) => {
+    const date = shiftDate(getHelsinkiToday(), offset);
+    const slots = await getSlotsForDate(db, date);
+    if (emptyError && slots.length === 0) {
+      return c.json({ error: emptyError }, 404);
+    }
+    return c.json({ slots, date });
+  });
+}
+
+/**
+ * End of slot `i`'s 15-minute window in epoch ms: the next slot's start, or
+ * +15min past its own start for the last slot of the day. Pulled out of the
+ * /now `.find` predicate so the boundary rule reads at a glance.
+ */
+function slotWindowEndMs(slots: PriceSlot[], i: number): number {
+  const start = new Date(slots[i].datetime).getTime();
+  return i < slots.length - 1 ? new Date(slots[i + 1].datetime).getTime() : start + SLOT_DURATION_MS;
+}
+
 export function pricesRoutes(db: Db): Hono {
   const router = new Hono();
   // Per-app heatmap query: each app instance gets its own cache (no cross-app leak).
   const getHeatmap = createHeatmap();
 
-  // GET /today — all slots for today (Helsinki time)
-  router.get('/today', async (c) => {
-    const today = getHelsinkiToday();
-    const slots = await getSlotsForDate(db, today);
-    return c.json({ slots, date: today });
-  });
-
-  // GET /yesterday — all slots for yesterday (Helsinki time)
-  router.get('/yesterday', async (c) => {
-    const today = getHelsinkiToday();
-    const yesterday = shiftDate(today, -1);
-    const slots = await getSlotsForDate(db, yesterday);
-    return c.json({ slots, date: yesterday });
-  });
-
-  // GET /tomorrow — all slots for tomorrow (Helsinki time), 404 if none
-  router.get('/tomorrow', async (c) => {
-    const today = getHelsinkiToday();
-    const tomorrow = shiftDate(today, 1);
-    const slots = await getSlotsForDate(db, tomorrow);
-
-    if (slots.length === 0) {
-      return c.json({ error: 'Tomorrow prices not yet available' }, 404);
-    }
-
-    return c.json({ slots, date: tomorrow });
-  });
+  // Day endpoints: /today (offset 0), /yesterday (-1), /tomorrow (+1, 404 until
+  // tomorrow's prices are published). All return { slots, date }.
+  registerDayRoute(router, db, '/today', 0);
+  registerDayRoute(router, db, '/yesterday', -1);
+  registerDayRoute(router, db, '/tomorrow', 1, 'Tomorrow prices not yet available');
 
   // GET /now — current 15-minute slot, percentile among today, and yesterday's same-time slot
   router.get('/now', async (c) => {
@@ -118,20 +129,19 @@ export function pricesRoutes(db: Db): Hono {
       return c.json({ error: 'No price data for today' }, 404);
     }
 
-    // Find the slot matching the current 15-minute window.
-    // Each slot's datetime is the start of its 15-minute window.
+    // Each slot's datetime is the start of its 15-minute window; find the one
+    // whose window contains `now`.
     const nowMs = now.getTime();
-    const currentSlot = todaySlots.find((slot, i) => {
-      const slotStart = new Date(slot.datetime).getTime();
-      const slotEnd = i < todaySlots.length - 1
-        ? new Date(todaySlots[i + 1].datetime).getTime()
-        : slotStart + SLOT_DURATION_MS;
-      return nowMs >= slotStart && nowMs < slotEnd;
-    });
+    const activeSlot = todaySlots.find(
+      (slot, i) => nowMs >= new Date(slot.datetime).getTime() && nowMs < slotWindowEndMs(todaySlots, i),
+    );
 
-    if (!currentSlot) {
-      return c.json({ error: 'Current time slot not found in today\'s data' }, 404);
-    }
+    // Fallback for delayed collection: when `now` sits past the last stored
+    // slot's window (e.g. it's 21:00 but data only runs to 20:00), serve the most
+    // recent slot flagged `stale` instead of a 404, so the UI shows a price with
+    // a freshness hint rather than nothing. todaySlots is non-empty here.
+    const stale = activeSlot === undefined;
+    const currentSlot = activeSlot ?? todaySlots[todaySlots.length - 1];
 
     // Calculate percentile: what % of today's slots are cheaper
     const cheaperCount = todaySlots.filter(s => s.priceWithTax < currentSlot.priceWithTax).length;
@@ -158,7 +168,7 @@ export function pricesRoutes(db: Db): Hono {
       (slot) => helsinkiMinutesOfDay(new Date(slot.datetime)) === currentMinutes,
     ) ?? null;
 
-    return c.json({ slot: currentSlot, percentile, yesterdaySlot });
+    return c.json({ slot: currentSlot, percentile, yesterdaySlot, stale });
   });
 
   // GET /range — slots for a date range, max 90 days
@@ -200,16 +210,7 @@ export function pricesRoutes(db: Db): Hono {
       return c.json({ error: `Date range cannot exceed ${MAX_RANGE_DAYS} days` }, 400);
     }
 
-    const rows = await db
-      .select()
-      .from(prices)
-      .where(and(
-        gte(prices.datetime, fromRange.start.toISOString()),
-        lt(prices.datetime, toRange.end.toISOString()),
-      ))
-      .orderBy(asc(prices.datetime));
-
-    const slots = mapSlots(rows);
+    const slots = await getSlotsForRange(db, fromRange.start, toRange.end);
 
     return c.json({ slots, from, to });
   });

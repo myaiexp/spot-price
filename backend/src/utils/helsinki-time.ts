@@ -81,6 +81,20 @@ export function helsinkiMinutesOfDay(date: Date): number {
 }
 
 /**
+ * Stable key for the Helsinki ISO week containing `today`: the YYYY-MM-DD of
+ * that week's Monday. Changes exactly at the Mon 00:00 week boundary, matching
+ * Postgres `date_trunc('week', …)` (also Monday-start). The ISO weekday of a
+ * bare calendar date is timezone-independent, so no tz math is needed beyond the
+ * Helsinki "today". Used to invalidate the heatmap cache on week rollover rather
+ * than serving last week's grid until the TTL expires.
+ */
+export function helsinkiWeekStart(today: string = getHelsinkiToday()): string {
+  // getUTCDay: 0=Sun..6=Sat → ISO weekday 1=Mon..7=Sun.
+  const isoWeekday = ((new Date(`${today}T00:00:00Z`).getUTCDay() + 6) % 7) + 1;
+  return shiftDate(today, -(isoWeekday - 1));
+}
+
+/**
  * Shift a YYYY-MM-DD string by a number of whole calendar days.
  *
  * Calendar-day arithmetic is DST-immune: parse the bare date as UTC midnight

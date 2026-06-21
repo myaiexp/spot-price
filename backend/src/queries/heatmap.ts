@@ -2,15 +2,13 @@
 
 import { sql } from 'drizzle-orm';
 import type { Db } from '../db/connection.js';
-
-const DAY_LABELS = ['Ma', 'Ti', 'Ke', 'To', 'Pe', 'La', 'Su'];
+import { helsinkiWeekStart } from '../utils/helsinki-time.js';
 
 const HEATMAP_TTL = 15 * 60 * 1000;
 
 /** One weekday row of the heatmap: 24 hourly cells in cents/kWh (null = no data yet). */
 export interface HeatmapDay {
-  day: number; // 0 = Mon … 6 = Sun
-  label: string; // Finnish weekday abbreviation
+  day: number; // 0 = Mon … 6 = Sun; the frontend maps this to a locale weekday label
   hours: Array<number | null>; // length 24; cents/kWh rounded to 2dp, null when no data
 }
 
@@ -29,16 +27,23 @@ export interface HeatmapResponse {
  * app's rows into the next regardless of its DB.
  */
 export function createHeatmap(): (db: Db) => Promise<HeatmapResponse> {
-  // In-memory heatmap cache with 15-min TTL, private to this closure.
-  let heatmapCache: { data: HeatmapResponse; timestamp: number } | null = null;
+  // In-memory cache, private to this closure. Keyed on the current Helsinki week
+  // so a Sunday-night entry is dropped at the Monday rollover instead of serving
+  // last week's grid (wrong week number + day labels) until the TTL expires.
+  let heatmapCache: { data: HeatmapResponse; timestamp: number; weekKey: string } | null = null;
 
   /**
    * Build the current week's hourly prices as a 7×24 grid (Helsinki time).
-   * Cached in-memory for 15 minutes.
+   * Cached in-memory for 15 minutes within the same Helsinki week.
    */
   return async function getHeatmap(db: Db): Promise<HeatmapResponse> {
-    // Check cache
-    if (heatmapCache && Date.now() - heatmapCache.timestamp < HEATMAP_TTL) {
+    // Serve the cache only when it is both fresh (TTL) and for the current week.
+    const weekKey = helsinkiWeekStart();
+    if (
+      heatmapCache &&
+      heatmapCache.weekKey === weekKey &&
+      Date.now() - heatmapCache.timestamp < HEATMAP_TTL
+    ) {
       return heatmapCache.data;
     }
 
@@ -62,51 +67,46 @@ export function createHeatmap(): (db: Db) => Promise<HeatmapResponse> {
     // a JS number happens here at the boundary. A malformed/NaN average (never
     // expected: price_with_tax is NOT NULL and each group has ≥1 row) is skipped
     // rather than poisoning the grid with NaN.
-    const cellValues = new Map<string, number>();
+    const avgPriceByDayHour = new Map<string, number>();
     for (const row of rows.rows as Array<{ weekday: number; hour: number; avg_price: string }>) {
       const avgPrice = parseFloat(row.avg_price);
       if (Number.isNaN(avgPrice)) continue;
       const weekday = row.weekday - 1; // ISODOW 1=Mon → 0
-      cellValues.set(`${weekday}-${row.hour}`, avgPrice);
+      avgPriceByDayHour.set(`${weekday}-${row.hour}`, avgPrice);
     }
 
-    // Current Helsinki weekday (0=Mon) and hour for the frontend to know what's "future"
-    const nowInfo = await db.execute(sql`
+    // ISO week number (Helsinki) — used only for the week label in the UI.
+    const weekResult = await db.execute(sql`
       SELECT
         EXTRACT(WEEK FROM NOW() AT TIME ZONE 'Europe/Helsinki')::int AS week_number
     `);
-    const now = (nowInfo.rows as Array<{ week_number: number }>)[0];
+    const currentWeek = (weekResult.rows as Array<{ week_number: number }>)[0];
 
-    // Build the matrix — null for cells without data (future)
-    let globalMin = Infinity;
-    let globalMax = -Infinity;
-
-    const matrix = Array.from({ length: 7 }, (_, day) => {
+    // Build the matrix — cents/kWh rounded to 2dp, null for cells without data.
+    const matrix: HeatmapDay[] = Array.from({ length: 7 }, (_, day) => {
       const hours = Array.from({ length: 24 }, (_, hour) => {
-        const price = cellValues.get(`${day}-${hour}`);
-        if (price === undefined) return null;
-
-        const centsPerKwh = price * 100;
-        if (centsPerKwh < globalMin) globalMin = centsPerKwh;
-        if (centsPerKwh > globalMax) globalMax = centsPerKwh;
-
-        return Math.round(centsPerKwh * 100) / 100;
+        const price = avgPriceByDayHour.get(`${day}-${hour}`);
+        return price === undefined ? null : Math.round(price * 100 * 100) / 100;
       });
-
-      return { day, label: DAY_LABELS[day], hours };
+      return { day, hours };
     });
 
-    if (globalMin === Infinity) globalMin = 0;
-    if (globalMax === -Infinity) globalMax = 0;
+    // Price range over populated cells only (0/0 when the week has no data yet).
+    // Rounding is monotonic, so min/max of the rounded cells equal the rounded
+    // min/max of the raw values — this two-pass form is behaviour-identical to
+    // accumulating during the build, just without the in-callback mutation.
+    const populated = matrix.flatMap((row) => row.hours.filter((cell): cell is number => cell !== null));
+    const minPrice = populated.length > 0 ? Math.min(...populated) : 0;
+    const maxPrice = populated.length > 0 ? Math.max(...populated) : 0;
 
     const response = {
       matrix,
-      minPrice: Math.round(globalMin * 100) / 100,
-      maxPrice: Math.round(globalMax * 100) / 100,
-      weekNumber: now.week_number,
+      minPrice,
+      maxPrice,
+      weekNumber: currentWeek.week_number,
     };
 
-    heatmapCache = { data: response, timestamp: Date.now() };
+    heatmapCache = { data: response, timestamp: Date.now(), weekKey };
 
     return response;
   };

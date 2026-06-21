@@ -157,6 +157,13 @@
       margin-top: 4px;
     }
 
+    .hero-card__stale {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      font-style: italic;
+      margin-top: 4px;
+    }
+
     .hero-card__loading {
       font-size: 1rem;
       color: var(--text-muted);
@@ -831,6 +838,13 @@
         html += `<div class="hero-card__yesterday">Eilen samaan aikaan: ${yPrice} c/kWh</div>`;
       }
 
+      // Collection lag: backend served the most recent available slot, not the
+      // live one. Flag the freshness so the headline price isn't read as "now".
+      // Interpolated values are our own API's number/ISO-time, not user input.
+      if (state.now.stale) {
+        html += `<div class="hero-card__stale">Viimeisin saatavilla oleva hinta (klo ${formatTime(state.now.slot.datetime)})</div>`;
+      }
+
       container.innerHTML = html;
     }
 
@@ -1319,7 +1333,7 @@
       // Rows
       for (let d = 0; d < heatmapData.length; d++) {
         const row = heatmapData[d];
-        const dayLabel = row.label;
+        const dayLabel = DAY_LABELS[row.day];
 
         const label = document.createElement('div');
         label.className = 'heatmap-row-label';
