@@ -24,3 +24,10 @@
 - Cost estimator is pure client-side using today+tomorrow slots
 - Chart controls: area/bar toggle, 15min/hourly resolution with EMA aggregation
 - Peak detection: 60th percentile threshold with 30min gap bridging
+
+## History
+
+Historical phase plans (design + implementation) live in `docs/plans/`:
+
+- [Phase 1 design](docs/plans/2026-03-06-spot-price-design.md) · [Phase 1 implementation](docs/plans/2026-03-06-spot-price-implementation.md)
+- [Phase 2 design](docs/plans/2026-03-07-phase2-design.md) · [Phase 2 implementation](docs/plans/2026-03-07-phase2-implementation.md)
