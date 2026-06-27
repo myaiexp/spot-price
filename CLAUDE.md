@@ -11,6 +11,7 @@
 - API sources: spot-hinta.fi (live 15-min), sahkotin.fi (historical hourly backfill, EUR/MWh → EUR/kWh × 1.255 VAT)
 - EMA (α=0.3) used for hourly chart aggregation
 - Heatmap shows current week's actual hourly prices (SQL-aggregated), greyed cells for missing data
+- Dependency hygiene: `backend/package.json` `overrides` aliases the deprecated `@esbuild-kit/esm-loader` + `@esbuild-kit/core-utils` (declared by drizzle-kit but never imported — it uses tsx) to `get-tsconfig`, a tiny zero-esbuild package already in the tree. This drops the deprecated packages and a stale `esbuild@0.18.20` copy from the lock file. Don't remove the override — it reintroduces the deprecated chain.
 
 ## Deploy
 
