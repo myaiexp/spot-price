@@ -6,28 +6,11 @@
 // returns the active slot with `stale: false`.
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { createApp } from '../app.js';
-import type { Db } from '../db/connection.js';
+// Same rows answer both of /now's day-scoped SELECTs (today + yesterday); the
+// stale logic keys on today's slots only.
+import { makeSelectDb as seededDb } from '../test-support/fake-db.js';
+import { row, type RawRow, type Slot } from '../test-support/rows.js';
 
-type RawRow = { datetime: string; priceNoTax: string; priceWithTax: string };
-
-// Db whose select-chain resolves to the given rows for any queried day (today
-// and yesterday both get these). Stale logic keys on today's slots only.
-function seededDb(rows: RawRow[]): Db {
-  const chain = {
-    from: () => chain,
-    where: () => chain,
-    orderBy: () => Promise.resolve(rows),
-  };
-  return { select: () => chain } as unknown as Db;
-}
-
-const row = (datetime: string, price: number): RawRow => ({
-  datetime,
-  priceNoTax: String(price),
-  priceWithTax: String(price),
-});
-
-type Slot = { datetime: string; priceNoTax: number; priceWithTax: number };
 type NowBody = { slot: Slot; percentile: number; yesterdaySlot: Slot | null; stale: boolean };
 
 async function nowAt(nowIso: string, rows: RawRow[]): Promise<{ status: number; body: NowBody }> {

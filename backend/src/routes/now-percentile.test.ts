@@ -6,32 +6,12 @@
 // percentiles, including the cheapest-slot floor of 0.
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { createApp } from '../app.js';
-import type { Db } from '../db/connection.js';
+// Same rows answer both of /now's day-scoped SELECTs (today, then yesterday);
+// percentile is computed from today's slots only, so the yesterday lookup just
+// resolves to a slot we don't assert on.
+import { makeSelectDb as seededDb } from '../test-support/fake-db.js';
+import { row, type RawRow, type Slot } from '../test-support/rows.js';
 
-type RawRow = { datetime: string; priceNoTax: string; priceWithTax: string };
-
-// Db whose select-chain resolves to the given rows regardless of the queried day.
-// /now issues two day-scoped SELECTs (today, then yesterday); serving the same
-// rows for both is fine here — percentile is computed from today's slots only,
-// and the yesterday lookup just resolves to some slot we don't assert on.
-function seededDb(rows: RawRow[]): Db {
-  const chain = {
-    from: () => chain,
-    where: () => chain,
-    orderBy: () => Promise.resolve(rows),
-  };
-  return { select: () => chain } as unknown as Db;
-}
-
-// priceNoTax is irrelevant to the percentile (which keys on priceWithTax); set it
-// equal to priceWithTax for brevity.
-const row = (datetime: string, priceWithTax: number): RawRow => ({
-  datetime,
-  priceNoTax: String(priceWithTax),
-  priceWithTax: String(priceWithTax),
-});
-
-type Slot = { datetime: string; priceNoTax: number; priceWithTax: number };
 type NowBody = { slot: Slot; percentile: number; yesterdaySlot: Slot | null };
 
 // Drive /now at a fixed instant so a known slot is "current". now =

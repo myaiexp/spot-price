@@ -7,20 +7,8 @@
 // after earlier chunks already succeeded.
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { backfillPrices } from './sahkotin.js';
-import type { Db } from '../db/connection.js';
-
-const okJson = (body: unknown) => ({ ok: true, status: 200, statusText: 'OK', json: async () => body });
-const failed = (status: number, statusText: string) => ({ ok: false, status, statusText, json: async () => ({}) });
-
-// Db stand-in counting how many upsert chains were opened (one per successful chunk).
-function countingDb() {
-  const state = { inserts: 0 };
-  const chain = {
-    values: () => chain,
-    onConflictDoUpdate: () => Promise.resolve({ rowCount: 1 }),
-  };
-  return { db: { insert: () => { state.inserts++; return chain; } } as unknown as Db, state };
-}
+import { okJson, failedResponse as failed } from '../test-support/fetch-stub.js';
+import { makeCountingInsertDb as countingDb } from '../test-support/fake-db.js';
 
 afterEach(() => {
   vi.unstubAllGlobals();

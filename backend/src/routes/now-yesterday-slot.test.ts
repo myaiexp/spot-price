@@ -9,8 +9,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { createApp } from '../app.js';
 import type { Db } from '../db/connection.js';
 import { getHelsinkiToday, getHelsinkiDateRange, shiftDate } from '../utils/helsinki-time.js';
-
-type RawRow = { datetime: string; priceNoTax: string; priceWithTax: string };
+import { taxedRow as slot, type RawRow, type Slot } from '../test-support/rows.js';
 
 // Pull the bound literal values (the right-hand operands of the WHERE comparisons,
 // e.g. the gte/lt ISO bounds on prices.datetime) out of a Drizzle SQL condition,
@@ -58,14 +57,6 @@ function twoQueryDb(byDayStart: Map<string, RawRow[]>): Db {
     }),
   } as unknown as Db;
 }
-
-const slot = (datetime: string, price: number): RawRow => ({
-  datetime,
-  priceNoTax: String(price),
-  priceWithTax: String(price * 1.255),
-});
-
-type Slot = { datetime: string; priceNoTax: number; priceWithTax: number };
 
 async function nowResponse(nowIso: string, todayRows: RawRow[], yesterdayRows: RawRow[]) {
   vi.useFakeTimers({ toFake: ['Date'] });

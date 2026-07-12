@@ -12,6 +12,7 @@
 - EMA (α=0.3) used for hourly chart aggregation
 - Heatmap shows current week's actual hourly prices (SQL-aggregated), greyed cells for missing data
 - Dependency hygiene: `backend/package.json` `overrides` aliases the deprecated `@esbuild-kit/esm-loader` + `@esbuild-kit/core-utils` (declared by drizzle-kit but never imported — it uses tsx) to `get-tsconfig`, a tiny zero-esbuild package already in the tree. This drops the deprecated packages and a stale `esbuild@0.18.20` copy from the lock file. Don't remove the override — it reintroduces the deprecated chain.
+- Test doubles are shared, not re-rolled: `backend/src/test-support/` holds the fake-Db builders (`makeSelectDb`/`makeCountingSelectDb`, `makeInsertDb`/`makeCountingInsertDb`/`makeCapturingInsertDb`), fetch stubs (`okJson`/`failedResponse`/`stubFetch`/`stubFailedFetch`), and row fixtures (`RawRow`/`Slot` types, `row()`/`taxedRow()` factories). New route/collector tests import from there rather than hand-casting `as unknown as Db`. The module is test-only — tsconfig `exclude`s `src/test-support/**` so it stays out of `dist/` and the `tsc --noEmit` graph (like `*.test.ts`); it's verified by vitest at runtime.
 
 ## Deploy
 

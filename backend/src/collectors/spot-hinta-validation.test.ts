@@ -5,6 +5,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { collectPrices } from './spot-hinta.js';
 import type { Db } from '../db/connection.js';
+import { makeCapturingInsertDb as capturingDb } from '../test-support/fake-db.js';
+import { stubFetch } from '../test-support/fetch-stub.js';
 
 // A valid spot-hinta.fi slot with a parseable DateTime.
 function goodSlot(i: number) {
@@ -14,30 +16,6 @@ function goodSlot(i: number) {
     PriceNoTax: 0.05 + i * 0.001,
     PriceWithTax: (0.05 + i * 0.001) * 1.255,
   };
-}
-
-// Db stand-in that records the rows handed to `.values()` so a test can assert
-// exactly which slots survived filtering. rowCount mirrors Postgres' upsert count
-// (= number of rows written).
-function capturingDb() {
-  const captured: { rows: unknown[] } = { rows: [] };
-  const chain = {
-    values: (rows: unknown[]) => { captured.rows = rows; return chain; },
-    onConflictDoUpdate: () => Promise.resolve({ rowCount: captured.rows.length }),
-  };
-  return { db: { insert: () => chain } as unknown as Db, captured };
-}
-
-function stubFetch(slots: unknown) {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(async () => ({
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      json: async () => slots,
-    })),
-  );
 }
 
 afterEach(() => {

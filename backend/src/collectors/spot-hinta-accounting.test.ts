@@ -5,6 +5,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { collectPrices } from './spot-hinta.js';
 import type { Db } from '../db/connection.js';
+import { makeInsertDb as fakeDb } from '../test-support/fake-db.js';
+import { stubFetch } from '../test-support/fetch-stub.js';
 
 // spot-hinta.fi TodayAndDayForward slots (subset of fields collectPrices reads).
 function makeSlots(n: number) {
@@ -14,31 +16,6 @@ function makeSlots(n: number) {
     PriceNoTax: 0.05 + i * 0.001,
     PriceWithTax: (0.05 + i * 0.001) * 1.255,
   }));
-}
-
-// Minimal Db stand-in: the insert chain resolves to a pg-style result whose
-// rowCount mirrors Postgres' ON CONFLICT DO UPDATE — the count of affected rows
-// (inserted + updated), which equals the batch size whether the rows were all
-// new, all conflicts, or a mix. The function can only ever see this combined
-// number, so that is exactly what the realistic mock returns.
-function fakeDb(rowCount: number): Db {
-  const chain = {
-    values: () => chain,
-    onConflictDoUpdate: () => Promise.resolve({ rowCount }),
-  };
-  return { insert: () => chain } as unknown as Db;
-}
-
-function stubFetch(slots: unknown) {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(async () => ({
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      json: async () => slots,
-    })),
-  );
 }
 
 afterEach(() => vi.unstubAllGlobals());

@@ -5,24 +5,8 @@
 // a bound sized far above any legitimate full backfill.
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { backfillPrices, backfillMaxChunks } from './sahkotin.js';
-import type { Db } from '../db/connection.js';
-
-// A fetch Response stand-in whose json() yields `body`.
-const okJson = (body: unknown) => ({ ok: true, status: 200, statusText: 'OK', json: async () => body });
-
-// Db stand-in that counts how many upsert chains were opened, so a test can
-// assert exactly how many chunks were processed. rowCount = 1 per chunk.
-function countingDb() {
-  const state = { inserts: 0 };
-  const chain = {
-    values: () => chain,
-    onConflictDoUpdate: () => Promise.resolve({ rowCount: 1 }),
-  };
-  return {
-    db: { insert: () => { state.inserts++; return chain; } } as unknown as Db,
-    state,
-  };
-}
+import { okJson } from '../test-support/fetch-stub.js';
+import { makeCountingInsertDb as countingDb } from '../test-support/fake-db.js';
 
 afterEach(() => {
   vi.unstubAllGlobals();

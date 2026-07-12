@@ -7,17 +7,7 @@
 // — backfillPrices reads [] as "no more history" and stops cleanly.
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { fetchSahkotinPrices } from './sahkotin.js';
-
-function stubOkFetch(body: unknown) {
-  const fetchMock = vi.fn(async () => ({
-    ok: true,
-    status: 200,
-    statusText: 'OK',
-    json: async () => body,
-  }));
-  vi.stubGlobal('fetch', fetchMock);
-  return fetchMock;
-}
+import { stubFetch as stubOkFetch } from '../test-support/fetch-stub.js';
 
 afterEach(() => vi.unstubAllGlobals());
 

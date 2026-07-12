@@ -5,34 +5,10 @@
 // that contract so a regression back to per-poll DB round-trips trips here.
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { createApp } from '../app.js';
-import type { Db } from '../db/connection.js';
-
-type RawRow = { datetime: string; priceNoTax: string; priceWithTax: string };
-
-const row = (datetime: string, priceWithTax: number): RawRow => ({
-  datetime,
-  priceNoTax: String(priceWithTax),
-  priceWithTax: String(priceWithTax),
-});
-
-// Db whose select-chain resolves to the given rows for any day, counting how many
-// SELECTs it serves. /now issues two day-scoped SELECTs per cache MISS (today +
-// yesterday); a cache HIT issues none — so selectCount() is the cache probe.
-function countingDb(rows: RawRow[]): { db: Db; selectCount: () => number } {
-  let count = 0;
-  const chain = {
-    from: () => chain,
-    where: () => chain,
-    orderBy: () => Promise.resolve(rows),
-  };
-  const db = {
-    select: () => {
-      count++;
-      return chain;
-    },
-  } as unknown as Db;
-  return { db, selectCount: () => count };
-}
+// /now issues two day-scoped SELECTs per cache MISS (today + yesterday); a cache
+// HIT issues none — so selectCount() is the cache probe.
+import { makeCountingSelectDb as countingDb } from '../test-support/fake-db.js';
+import { row } from '../test-support/rows.js';
 
 afterEach(() => {
   vi.useRealTimers();

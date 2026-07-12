@@ -13,33 +13,14 @@
 // error and not an empty array.
 import { describe, it, expect } from 'vitest';
 import { createApp } from '../app.js';
-import type { Db } from '../db/connection.js';
+import { makeSelectDb } from '../test-support/fake-db.js';
 
-// Minimal Db whose select-chain resolves to an empty result set. Valid-date
-// requests reach the query and get 200 with []; invalid-date requests are
-// rejected before the chain is ever awaited.
-function fakeDb(): Db {
-  const chain = {
-    from: () => chain,
-    where: () => chain,
-    orderBy: () => Promise.resolve([] as unknown[]),
-  };
-  return { select: () => chain } as unknown as Db;
-}
-
-// Db whose select-chain resolves to the given raw rows (string numerics, as
-// node-postgres returns NUMERIC). Lets a request prove it returns real data.
-function seededDb(rows: Array<{ datetime: string; priceNoTax: string; priceWithTax: string }>): Db {
-  const chain = {
-    from: () => chain,
-    where: () => chain,
-    orderBy: () => Promise.resolve(rows),
-  };
-  return { select: () => chain } as unknown as Db;
-}
+// Empty-result Db: valid-date requests reach the query and get 200 with [];
+// invalid-date requests are rejected before the chain is ever awaited.
+const emptyDb = () => makeSelectDb([]);
 
 async function rangeStatus(from: string, to: string): Promise<number> {
-  const app = createApp(fakeDb());
+  const app = createApp(emptyDb());
   const res = await app.request(`/api/prices/range?from=${from}&to=${to}`);
   return res.status;
 }
@@ -63,7 +44,7 @@ describe('GET /range calendar-date validation (audit #1610)', () => {
   }
 
   it('returns a clear "valid calendar dates" error message', async () => {
-    const app = createApp(fakeDb());
+    const app = createApp(emptyDb());
     const res = await app.request('/api/prices/range?from=2026-02-30&to=2026-03-10');
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string };
@@ -86,7 +67,7 @@ describe('GET /range calendar-date validation (audit #1610)', () => {
 
 describe('GET /range request contract (audit #3131)', () => {
   async function rangeBody(query: string): Promise<{ status: number; body: { error?: string; slots?: unknown[]; from?: string; to?: string } }> {
-    const app = createApp(fakeDb());
+    const app = createApp(emptyDb());
     const res = await app.request(`/api/prices/range${query}`);
     return { status: res.status, body: await res.json() };
   }
@@ -136,7 +117,7 @@ describe('GET /range request contract (audit #3131)', () => {
   //     returns that day's slots — NOT a 400 and NOT an empty array. ---
   it('200 with the single day\'s slots when from === to', async () => {
     const row = { datetime: '2026-03-10T08:00:00.000Z', priceNoTax: '5', priceWithTax: '6.275' };
-    const app = createApp(seededDb([row]));
+    const app = createApp(makeSelectDb([row]));
     const res = await app.request('/api/prices/range?from=2026-03-10&to=2026-03-10');
     expect(res.status).toBe(200);
     const body = (await res.json()) as { slots: unknown[]; from: string; to: string };
@@ -151,7 +132,7 @@ describe('GET /range request contract (audit #3131)', () => {
       { datetime: '2026-03-10T08:00:00.000Z', priceNoTax: '5', priceWithTax: '6.275' },
       { datetime: '2026-03-11T08:00:00.000Z', priceNoTax: '7', priceWithTax: '8.785' },
     ];
-    const app = createApp(seededDb(rows));
+    const app = createApp(makeSelectDb(rows));
     const res = await app.request('/api/prices/range?from=2026-03-10&to=2026-03-11');
     expect(res.status).toBe(200);
     const body = (await res.json()) as { slots: unknown[] };

@@ -5,27 +5,16 @@
 // response carries only well-formed slots; valid rows pass through unchanged.
 import { describe, it, expect } from 'vitest';
 import { createApp } from '../app.js';
-import type { Db } from '../db/connection.js';
+import { makeSelectDb } from '../test-support/fake-db.js';
+import type { Slot } from '../test-support/rows.js';
 
 // Raw row as node-postgres yields it: NUMERIC columns are strings, but a NULL or
-// malformed cell can surface as null/garbage — modelled here as `unknown`.
-type RawRow = { datetime: string; priceNoTax: unknown; priceWithTax: unknown };
+// malformed cell can surface as null/garbage — modelled here as `unknown`. This
+// deliberately widens the shared RawRow (string prices) to exercise the guard.
+type MalformedRow = { datetime: string; priceNoTax: unknown; priceWithTax: unknown };
 
-// Db whose select-chain resolves to the given raw rows (the fake ignores the
-// WHERE clause, so seeded rows pass straight through mapSlots regardless of date).
-function seededDb(rows: RawRow[]): Db {
-  const chain = {
-    from: () => chain,
-    where: () => chain,
-    orderBy: () => Promise.resolve(rows),
-  };
-  return { select: () => chain } as unknown as Db;
-}
-
-type Slot = { datetime: string; priceNoTax: number; priceWithTax: number };
-
-async function rangeSlots(rows: RawRow[]): Promise<Slot[]> {
-  const app = createApp(seededDb(rows));
+async function rangeSlots(rows: MalformedRow[]): Promise<Slot[]> {
+  const app = createApp(makeSelectDb(rows));
   const res = await app.request('/api/prices/range?from=2026-03-10&to=2026-03-10');
   expect(res.status).toBe(200);
   const body = (await res.json()) as { slots: Slot[] };
@@ -33,7 +22,7 @@ async function rangeSlots(rows: RawRow[]): Promise<Slot[]> {
 }
 
 describe('toSlot numeric guard (audit #3125)', () => {
-  const good: RawRow = { datetime: '2026-03-10T08:00:00.000Z', priceNoTax: '5', priceWithTax: '6.275' };
+  const good: MalformedRow = { datetime: '2026-03-10T08:00:00.000Z', priceNoTax: '5', priceWithTax: '6.275' };
 
   it('passes well-formed rows through unchanged', async () => {
     const slots = await rangeSlots([good]);
@@ -43,21 +32,21 @@ describe('toSlot numeric guard (audit #3125)', () => {
   });
 
   it('drops a row whose NUMERIC column is NULL rather than emitting NaN -> null', async () => {
-    const bad: RawRow = { datetime: '2026-03-10T09:00:00.000Z', priceNoTax: null, priceWithTax: '6.275' };
+    const bad: MalformedRow = { datetime: '2026-03-10T09:00:00.000Z', priceNoTax: null, priceWithTax: '6.275' };
     const slots = await rangeSlots([good, bad]);
     expect(slots).toHaveLength(1);
     expect(slots[0].datetime).toBe('2026-03-10T08:00:00.000Z');
   });
 
   it('drops a row whose NUMERIC column is a non-numeric string', async () => {
-    const bad: RawRow = { datetime: '2026-03-10T10:00:00.000Z', priceNoTax: '5', priceWithTax: 'not-a-number' };
+    const bad: MalformedRow = { datetime: '2026-03-10T10:00:00.000Z', priceNoTax: '5', priceWithTax: 'not-a-number' };
     const slots = await rangeSlots([good, bad]);
     expect(slots).toHaveLength(1);
     expect(slots[0].datetime).toBe('2026-03-10T08:00:00.000Z');
   });
 
   it('never emits NaN or null in price fields across a mixed batch', async () => {
-    const rows: RawRow[] = [
+    const rows: MalformedRow[] = [
       good,
       { datetime: '2026-03-10T09:00:00.000Z', priceNoTax: null, priceWithTax: null },
       { datetime: '2026-03-10T10:00:00.000Z', priceNoTax: 'x', priceWithTax: '6.275' },

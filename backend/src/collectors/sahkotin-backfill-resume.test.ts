@@ -6,18 +6,11 @@
 // the default and the explicit-startFrom cases.
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { backfillPrices } from './sahkotin.js';
-import type { Db } from '../db/connection.js';
+import { okJson } from '../test-support/fetch-stub.js';
+import { makeInsertDb } from '../test-support/fake-db.js';
 
-const okJson = (body: unknown) => ({ ok: true, status: 200, statusText: 'OK', json: async () => body });
-
-// A db stand-in whose upsert resolves to one affected row per chunk.
-function countingDb() {
-  const chain = {
-    values: () => chain,
-    onConflictDoUpdate: () => Promise.resolve({ rowCount: 1 }),
-  };
-  return { insert: () => chain } as unknown as Db;
-}
+// One affected row per chunk — this file never asserts on the count.
+const countingDb = () => makeInsertDb(1);
 
 // First chunk has data, second is empty → the walk stops after exactly one fetch
 // window, so calls[0] is the window anchored at the upper bound under test.

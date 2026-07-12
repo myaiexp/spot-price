@@ -8,13 +8,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { collectPrices } from './spot-hinta.js';
 import type { Db } from '../db/connection.js';
-
-function stubFetch(body: unknown) {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(async () => ({ ok: true, status: 200, statusText: 'OK', json: async () => body })),
-  );
-}
+import { stubFetch } from '../test-support/fetch-stub.js';
 
 afterEach(() => vi.unstubAllGlobals());
 

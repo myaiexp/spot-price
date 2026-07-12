@@ -6,26 +6,10 @@
 // helpers the handlers use so the assertions hold whatever the wall-clock day.
 import { describe, it, expect } from 'vitest';
 import { createApp } from '../app.js';
-import type { Db } from '../db/connection.js';
 import { getHelsinkiToday, shiftDate } from '../utils/helsinki-time.js';
+import { makeSelectDb as seededDb } from '../test-support/fake-db.js';
+import type { RawRow, Slot } from '../test-support/rows.js';
 
-type RawRow = { datetime: string; priceNoTax: string; priceWithTax: string };
-
-// Db whose select-chain resolves to the given raw rows (string numerics, as
-// node-postgres returns NUMERIC). The fake ignores the WHERE clause, so the same
-// rows answer whichever day a handler queries — the `date` in the response is
-// therefore driven purely by the handler's own day arithmetic, which is what we
-// assert. An empty array models a day with no stored prices.
-function seededDb(rows: RawRow[]): Db {
-  const chain = {
-    from: () => chain,
-    where: () => chain,
-    orderBy: () => Promise.resolve(rows),
-  };
-  return { select: () => chain } as unknown as Db;
-}
-
-type Slot = { datetime: string; priceNoTax: number; priceWithTax: number };
 type DayBody = { slots: Slot[]; date: string };
 
 const ROWS: RawRow[] = [
