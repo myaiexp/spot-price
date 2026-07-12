@@ -3,7 +3,9 @@ import { sql } from 'drizzle-orm';
 import type { Db } from '../db/connection.js';
 import { prices } from '../db/schema.js';
 
-export interface PriceValue {
+// String-formatted row ready to upsert (prices are DB-precision decimal strings,
+// not numbers). Distinct from the numeric API PriceSlot and the raw select PriceRow.
+export interface PriceInsert {
   datetime: string;
   priceNoTax: string;
   priceWithTax: string;
@@ -14,7 +16,7 @@ export interface PriceValue {
  * conflict. Returns the pg result; callers read `rowCount`, which Postgres reports
  * as inserted + updated combined (it does not split the two — see collectPrices).
  */
-export function upsertPrices(db: Db, values: PriceValue[]) {
+export function upsertPrices(db: Db, values: PriceInsert[]) {
   return db
     .insert(prices)
     .values(values)
