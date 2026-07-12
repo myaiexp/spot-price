@@ -860,34 +860,34 @@
       }
     }
 
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        if (btn.disabled) return;
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        state.activeTab = btn.dataset.tab;
-        renderChart();
-        renderInsights();
+    // Exclusive toggle group: a click moves .active to the clicked button, then runs onSelect(btn)
+    function wireToggleGroup(selector, onSelect) {
+      const buttons = document.querySelectorAll(selector);
+      buttons.forEach(btn => {
+        btn.addEventListener('click', () => {
+          if (btn.disabled) return;
+          buttons.forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          onSelect(btn);
+        });
       });
+    }
+
+    wireToggleGroup('.tab-btn', btn => {
+      state.activeTab = btn.dataset.tab;
+      renderChart();
+      renderInsights();
     });
 
     // ─── Chart Controls ──────────────────────────────────────────────
-    document.querySelectorAll('#chartTypeToggle .toggle-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('#chartTypeToggle .toggle-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        state.chartType = btn.dataset.value;
-        renderChart();
-      });
+    wireToggleGroup('#chartTypeToggle .toggle-btn', btn => {
+      state.chartType = btn.dataset.value;
+      renderChart();
     });
 
-    document.querySelectorAll('#resolutionToggle .toggle-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('#resolutionToggle .toggle-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        state.resolution = btn.dataset.value;
-        renderChart();
-      });
+    wireToggleGroup('#resolutionToggle .toggle-btn', btn => {
+      state.resolution = btn.dataset.value;
+      renderChart();
     });
 
     // ─── Chart ───────────────────────────────────────────────────────
@@ -1118,12 +1118,17 @@
       };
     }
 
+    // Sorted-price value at a fractional index — names the shared "cheapest-third"/"peak-percentile" idiom
+    function priceThreshold(slots, fraction) {
+      const prices = slots.map(s => s.priceWithTax).sort((a, b) => a - b);
+      return prices[Math.floor(prices.length * fraction)];
+    }
+
     function findNextCheapWindow(slots, currentIndex) {
       if (!slots || slots.length === 0) return null;
 
       // Determine threshold: cheapest third of all slots
-      const prices = slots.map(s => s.priceWithTax).sort((a, b) => a - b);
-      const threshold = prices[Math.floor(prices.length / 3)];
+      const threshold = priceThreshold(slots, 1 / 3);
 
       // Check if currently in a cheap slot
       if (currentIndex < slots.length && slots[currentIndex].priceWithTax <= threshold) {
@@ -1155,8 +1160,7 @@
       if (!slots || slots.length === 0) return null;
 
       // Threshold: 60th percentile — above-average but not extreme
-      const sorted = slots.map(s => s.priceWithTax).sort((a, b) => a - b);
-      const threshold = sorted[Math.floor(sorted.length * 0.6)];
+      const threshold = priceThreshold(slots, 0.6);
 
       // Mark slots above threshold, then bridge gaps ≤ 2 slots (30 min)
       const above = slots.map(s => s.priceWithTax >= threshold);
