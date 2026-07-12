@@ -3,6 +3,7 @@
 import { sql } from 'drizzle-orm';
 import type { Db } from '../db/connection.js';
 import { helsinkiWeekStart } from '../utils/helsinki-time.js';
+import { createTimeKeyedCache } from '../utils/time-keyed-cache.js';
 
 const HEATMAP_TTL = 15 * 60 * 1000;
 
@@ -27,24 +28,21 @@ export interface HeatmapResponse {
  * app's rows into the next regardless of its DB.
  */
 export function createHeatmap(): (db: Db) => Promise<HeatmapResponse> {
-  // In-memory cache, private to this closure. Keyed on the current Helsinki week
-  // so a Sunday-night entry is dropped at the Monday rollover instead of serving
-  // last week's grid (wrong week number + day labels) until the TTL expires.
-  let heatmapCache: { data: HeatmapResponse; timestamp: number; weekKey: string } | null = null;
+  // Cache keyed on the current Helsinki week: a Sunday-night entry is dropped at
+  // the Monday rollover (wrong key) instead of serving last week's grid (wrong
+  // week number + day labels) until the TTL expires. Key-equality + TTL guard
+  // and per-closure isolation live in createTimeKeyedCache.
+  const cache = createTimeKeyedCache<HeatmapResponse>(HEATMAP_TTL);
 
   /**
    * Build the current week's hourly prices as a 7×24 grid (Helsinki time).
    * Cached in-memory for 15 minutes within the same Helsinki week.
    */
   return async function getHeatmap(db: Db): Promise<HeatmapResponse> {
-    // Serve the cache only when it is both fresh (TTL) and for the current week.
     const weekKey = helsinkiWeekStart();
-    if (
-      heatmapCache &&
-      heatmapCache.weekKey === weekKey &&
-      Date.now() - heatmapCache.timestamp < HEATMAP_TTL
-    ) {
-      return heatmapCache.data;
+    const cached = cache.get(weekKey);
+    if (cached) {
+      return cached;
     }
 
     // Current week Mon..Sun in Helsinki time, include all available data
@@ -106,7 +104,7 @@ export function createHeatmap(): (db: Db) => Promise<HeatmapResponse> {
       weekNumber: currentWeek.week_number,
     };
 
-    heatmapCache = { data: response, timestamp: Date.now(), weekKey };
+    cache.set(weekKey, response);
 
     return response;
   };

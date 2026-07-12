@@ -5,6 +5,7 @@ import type { Db } from '../db/connection.js';
 import { prices } from '../db/schema.js';
 import { getHelsinkiToday, getHelsinkiDateRange, shiftDate, isValidCalendarDate, helsinkiMinutesOfDay } from '../utils/helsinki-time.js';
 import { createHeatmap } from '../queries/heatmap.js';
+import { createTimeKeyedCache } from '../utils/time-keyed-cache.js';
 
 interface PriceSlot {
   datetime: string;
@@ -197,21 +198,22 @@ export function pricesRoutes(db: Db): Hono {
   // polls within a slot reuse one result instead of issuing two DB round-trips
   // each (today + yesterday slices). The slot key drops the cache the instant the
   // slot turns over (every 15 min); the TTL bounds staleness from an off-boundary
-  // collector upsert landing mid-slot. Per-app closure — no cross-app or
-  // cross-test cache leak (mirrors createHeatmap).
-  let nowCache: (NowResult & { timestamp: number; slotKey: string }) | null = null;
+  // collector upsert landing mid-slot. Key-equality + TTL guard and per-app
+  // isolation live in createTimeKeyedCache (same seam as createHeatmap).
+  const nowCache = createTimeKeyedCache<NowResult>(NOW_TTL);
 
   router.get('/now', async (c) => {
     const now = new Date();
     const today = getHelsinkiToday();
     const slotKey = `${today}:${Math.floor(helsinkiMinutesOfDay(now) / 15)}`;
 
-    if (nowCache && nowCache.slotKey === slotKey && Date.now() - nowCache.timestamp < NOW_TTL) {
-      return c.json(nowCache.body, nowCache.status);
+    const cached = nowCache.get(slotKey);
+    if (cached) {
+      return c.json(cached.body, cached.status);
     }
 
     const result = await computeNowResponse(db, now, today);
-    nowCache = { ...result, timestamp: Date.now(), slotKey };
+    nowCache.set(slotKey, result);
     return c.json(result.body, result.status);
   });
 
