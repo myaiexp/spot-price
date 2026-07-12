@@ -786,13 +786,12 @@
       for (let h = 0; h < 24; h++) {
         const quarter = slots.slice(h * 4, h * 4 + 4);
         if (quarter.length === 0) continue;
-        // EMA across the 4 quarter-slots (chronological, so :45 weighted most)
+        // EMA across the 4 quarter-slots (chronological, so :45 weighted most).
+        // Both series smoothed in one pass — same formula, two accumulators.
         let ema = quarter[0].priceWithTax;
-        for (let i = 1; i < quarter.length; i++) {
-          ema = alpha * quarter[i].priceWithTax + (1 - alpha) * ema;
-        }
         let emaNoTax = quarter[0].priceNoTax;
         for (let i = 1; i < quarter.length; i++) {
+          ema = alpha * quarter[i].priceWithTax + (1 - alpha) * ema;
           emaNoTax = alpha * quarter[i].priceNoTax + (1 - alpha) * emaNoTax;
         }
         hourly.push({
@@ -1311,15 +1310,11 @@
 
       const heatmapData = state.heatmap.matrix;
 
-      // Find min/max across populated values only
-      let allValues = [];
-      for (const row of heatmapData) {
-        for (const val of row.hours) {
-          if (val !== null && val !== undefined && val !== 0) allValues.push(val);
-        }
-      }
-      const minPrice = allValues.length > 0 ? Math.min(...allValues) : 0;
-      const maxPrice = allValues.length > 0 ? Math.max(...allValues) : 1;
+      // Color scale spans the backend-computed range over populated cells — the
+      // single source of truth. The backend null-marks missing cells, so 0 is a
+      // real price and stays in range (a genuinely 0/negative hour must colour).
+      const minPrice = state.heatmap.minPrice;
+      const maxPrice = state.heatmap.maxPrice;
 
       // Corner cell
       const corner = document.createElement('div');
@@ -1437,37 +1432,33 @@
       return slots;
     }
 
+    // Resolve a wall-clock deadline hour (e.g. 7 for 07:00, may be fractional for
+    // HH:MM inputs) to the index of the first slot at or after it. Slots run
+    // chronologically from "now" through tomorrow, so the deadline is the *next*
+    // occurrence of that time of day: one already reached by the first slot rolls
+    // to tomorrow. The returned index is the charging window's exclusive upper
+    // bound — the appliance must finish by then. Returns null only when the
+    // deadline lands past the last available slot.
+    function findDeadlineSlotIndex(slots, deadlineHour) {
+      const first = new Date(slots[0].datetime);
+      const h = Math.floor(deadlineHour);
+      const m = Math.round((deadlineHour - h) * 60);
+      const deadline = new Date(first);
+      deadline.setHours(h, m, 0, 0);
+      if (deadline <= first) deadline.setDate(deadline.getDate() + 1);
+      for (let i = 0; i < slots.length; i++) {
+        if (new Date(slots[i].datetime) >= deadline) return i;
+      }
+      return null;
+    }
+
     function findOptimalWindow(slots, durationHours, powerKw, deadlineHour) {
       const quarterSlots = Math.ceil(durationHours * 4);
       if (slots.length < quarterSlots) return null;
 
       let deadlineSlotIndex = null;
       if (deadlineHour !== null && deadlineHour !== undefined) {
-        // Find the slot index where the deadline falls
-        // Deadline is relative: if deadline is e.g. 7, find first slot at or after 07:00
-        // For today+tomorrow combined, we need to find by datetime
-        for (let i = 0; i < slots.length; i++) {
-          const d = new Date(slots[i].datetime);
-          const slotHour = d.getHours() + d.getMinutes() / 60;
-          // If deadline is in the future relative to first slot
-          if (i > 0 && slotHour >= deadlineHour - 0.001 && slotHour < deadlineHour + 0.25) {
-            deadlineSlotIndex = i;
-            break;
-          }
-        }
-        // If deadline wasn't found, try matching any occurrence
-        if (deadlineSlotIndex === null) {
-          for (let i = 0; i < slots.length; i++) {
-            const d = new Date(slots[i].datetime);
-            const h = d.getHours();
-            const m = d.getMinutes();
-            if (h === Math.floor(deadlineHour) && m === 0) {
-              deadlineSlotIndex = i;
-              // Prefer a later occurrence (tomorrow) if window doesn't fit
-              // but break on first match for simplicity
-            }
-          }
-        }
+        deadlineSlotIndex = findDeadlineSlotIndex(slots, deadlineHour);
         if (deadlineSlotIndex === null) return null;
       }
 
