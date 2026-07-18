@@ -33,6 +33,19 @@ export function findDeadlineSlotIndex(slots, deadlineHour) {
   return null;
 }
 
+// True when the deadline rolls to the Helsinki day *after* slots[0] and that
+// day has no matching slot — the usual case is "deadline is tomorrow morning,
+// but tomorrow's prices aren't published yet." Same-day deadlines that simply
+// fall past the last slot return false (that's a different miss).
+export function isDeadlineDayUnavailable(slots, deadlineHour) {
+  if (deadlineHour === null || deadlineHour === undefined) return false;
+  if (!slots || slots.length === 0) return false;
+  const deadlineMin = deadlineHour * 60;
+  const firstMin = helsinkiMinutesOfDay(slots[0].datetime);
+  if (deadlineMin > firstMin) return false; // still on the first slot's day
+  return findDeadlineSlotIndex(slots, deadlineHour) === null;
+}
+
 // Cheapest and most expensive contiguous windows of `durationHours` within the
 // deadline (if any). endIndex is the exclusive window-end slot index (start +
 // window length) — the view resolves it through slotBoundaryMs, so a window
