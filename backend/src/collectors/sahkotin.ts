@@ -1,7 +1,7 @@
 // Historical hourly backfill from sahkotin.fi (EUR/MWh → EUR/kWh × VAT).
 import { FETCH_TIMEOUT_MS, httpErrorDetail } from '../utils/http.js';
 import { mwhToKwh, applyVat } from '../utils/price-conversion.js';
-import { upsertPrices } from './upsert.js';
+import { upsertPrices, makePriceInsert } from './upsert.js';
 import type { Db } from '../db/connection.js';
 
 const SAHKOTIN_PRICES_URL = 'https://sahkotin.fi/prices';
@@ -131,16 +131,10 @@ export async function backfillPrices(
       break;
     }
 
-    // Format to 5 decimals to match the prices table's NUMERIC(10,5) scale (see
-    // collectPrices) — keeps stored strings canonical and API-round-trip stable.
     const values = slots.map((slot) => {
       const noTax = mwhToKwh(slot.value);
       const withTax = applyVat(noTax);
-      return {
-        datetime: slot.date,
-        priceNoTax: noTax.toFixed(5),
-        priceWithTax: withTax.toFixed(5),
-      };
+      return makePriceInsert(slot.date, noTax, withTax);
     });
 
     const result = await upsertPrices(db, values);

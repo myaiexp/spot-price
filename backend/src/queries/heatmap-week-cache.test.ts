@@ -5,25 +5,13 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { createHeatmap } from './heatmap.js';
 import type { Db } from '../db/connection.js';
+import { makeHeatmapExecuteDb } from '../test-support/fake-db.js';
 
-// Db where each getHeatmap call (two db.execute calls: cells, then week) draws
-// the next week number from a queue, so a cache MISS is observable as a new
-// number and a cache HIT as the previously returned one.
+// A queue of week numbers drives the two-call heatmap protocol: each getHeatmap
+// call draws the next number, so a cache MISS is observable as a new number and a
+// cache HIT as the previously returned one (the cell rows are fixed).
 function weekSeqDb(weekNumbers: number[]): Db {
-  let pair = 0;
-  let callInPair = 0;
-  return {
-    execute: async () => {
-      callInPair += 1;
-      if (callInPair === 1) {
-        return { rows: [{ weekday: 1, hour: 0, avg_price: '0.1' }] };
-      }
-      callInPair = 0;
-      const wk = weekNumbers[pair];
-      pair += 1;
-      return { rows: [{ week_number: wk }] };
-    },
-  } as unknown as Db;
+  return makeHeatmapExecuteDb([{ weekday: 1, hour: 0, avg_price: '0.1' }], weekNumbers);
 }
 
 async function weekOf(getHeatmap: (db: Db) => Promise<{ weekNumber: number }>, db: Db): Promise<number> {

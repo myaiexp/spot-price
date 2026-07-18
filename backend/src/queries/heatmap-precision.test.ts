@@ -6,17 +6,12 @@
 import { describe, it, expect } from 'vitest';
 import { createHeatmap } from './heatmap.js';
 import type { Db } from '../db/connection.js';
+import { makeHeatmapExecuteDb, type HeatmapCell } from '../test-support/fake-db.js';
 
-// Fake Db: getHeatmap calls db.execute twice — first the aggregated cell rows
-// (avg_price as the NUMERIC *string* node-postgres returns), then the week row.
-function fakeDb(cells: Array<{ weekday: number; hour: number; avg_price: string }>): Db {
-  let call = 0;
-  return {
-    execute: async () => {
-      call += 1;
-      return call === 1 ? { rows: cells } : { rows: [{ week_number: 24 }] };
-    },
-  } as unknown as Db;
+// getHeatmap calls db.execute twice — first the aggregated cell rows (avg_price
+// as the NUMERIC *string* node-postgres returns), then the week row (fixed 24).
+function fakeDb(cells: HeatmapCell[]): Db {
+  return makeHeatmapExecuteDb(cells, 24);
 }
 
 describe('heatmap NUMERIC aggregate handling (audit #3913)', () => {

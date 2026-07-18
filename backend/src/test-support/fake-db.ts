@@ -65,6 +65,42 @@ export function makeCountingInsertDb(rowCount = 1): { db: Db; state: { inserts: 
   return { db, state };
 }
 
+// One aggregated heatmap cell row as getHeatmap's first db.execute returns it:
+// a weekday/hour bucket with its NUMERIC average. node-postgres hands NUMERIC
+// back as a string, but a bare number is accepted too (parseFloat coerces both).
+export interface HeatmapCell {
+  weekday: number;
+  hour: number;
+  avg_price: string | number;
+}
+
+// Db double for getHeatmap's two-call execute protocol: each uncached invocation
+// issues two db.execute calls — first the aggregated cell rows, then the ISO
+// week-number row. Encoding that pairing here means a change to the query
+// sequence is a one-file edit, not three. `cells` answers every first (cell)
+// call. `weekNumbers` answers each second (week) call: a single number for a
+// constant week, or an array used as a queue — one entry consumed per getHeatmap
+// call, so a cache MISS draws the next number and a HIT draws none, making cache
+// behaviour observable.
+export function makeHeatmapExecuteDb(cells: HeatmapCell[], weekNumbers: number | number[]): Db {
+  const queue = Array.isArray(weekNumbers) ? weekNumbers : [weekNumbers];
+  const constant = !Array.isArray(weekNumbers);
+  let pairIndex = 0;
+  let callInPair = 0;
+  return {
+    execute: async () => {
+      callInPair += 1;
+      if (callInPair === 1) {
+        return { rows: cells };
+      }
+      callInPair = 0;
+      const wk = constant ? queue[0] : queue[pairIndex];
+      pairIndex += 1;
+      return { rows: [{ week_number: wk }] };
+    },
+  } as unknown as Db;
+}
+
 // Insert-chain fake that records the rows handed to .values(), so a test can
 // assert exactly which rows survived filtering. rowCount mirrors the written count.
 export function makeCapturingInsertDb(): { db: Db; captured: { rows: unknown[] } } {

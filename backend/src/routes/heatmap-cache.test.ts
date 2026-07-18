@@ -5,20 +5,13 @@
 import { describe, it, expect } from 'vitest';
 import { createApp } from '../app.js';
 import type { Db } from '../db/connection.js';
+import { makeHeatmapExecuteDb } from '../test-support/fake-db.js';
 
 // Db stand-in for the heatmap query: getHeatmap calls db.execute twice per
 // invocation — first the cell rows, then the week-number row. Tag each DB with a
-// distinct weekNumber so the response reveals which DB it was served from.
+// distinct constant weekNumber so the response reveals which DB it was served from.
 function fakeHeatmapDb(weekNumber: number): Db {
-  let call = 0;
-  return {
-    execute: async () => {
-      call += 1;
-      return call % 2 === 1
-        ? { rows: [{ weekday: 1, hour: 0, avg_price: 0.1 }] }
-        : { rows: [{ week_number: weekNumber }] };
-    },
-  } as unknown as Db;
+  return makeHeatmapExecuteDb([{ weekday: 1, hour: 0, avg_price: 0.1 }], weekNumber);
 }
 
 async function heatmapWeek(db: Db): Promise<number> {

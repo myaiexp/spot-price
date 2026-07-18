@@ -2,7 +2,7 @@
 
 import { sql } from 'drizzle-orm';
 import type { Db } from '../db/connection.js';
-import { helsinkiWeekStart } from '../utils/helsinki-time.js';
+import { helsinkiWeekStart, getHelsinkiDateRange, shiftDate } from '../utils/helsinki-time.js';
 import { createTimeKeyedCache } from '../utils/time-keyed-cache.js';
 
 const HEATMAP_TTL = 15 * 60 * 1000;
@@ -45,17 +45,25 @@ export function createHeatmap(): (db: Db) => Promise<HeatmapResponse> {
       return cached;
     }
 
-    // Current week Mon..Sun in Helsinki time, include all available data
+    // Current Helsinki week [Mon 00:00, next Mon 00:00) as UTC instants. weekKey
+    // is already this week's Monday (YYYY-MM-DD); each boundary is the DST-aware
+    // Helsinki-midnight UTC instant, so a DST transition inside the week shifts
+    // the bound by exactly the right hour. Filtering the raw timestamptz column
+    // against these bound parameters keeps the primary-key index usable — the
+    // former `datetime AT TIME ZONE …` on the column forced a full sequential
+    // scan of the entire prices history on every cache miss, though the query
+    // only ever needs the current week's ~700 rows. AT TIME ZONE stays in the
+    // SELECT, where it groups the already-narrowed rows by local weekday/hour.
+    const { start } = getHelsinkiDateRange(weekKey);
+    const { end } = getHelsinkiDateRange(shiftDate(weekKey, 6));
     const rows = await db.execute(sql`
       SELECT
         EXTRACT(ISODOW FROM datetime AT TIME ZONE 'Europe/Helsinki')::int AS weekday,
         EXTRACT(HOUR FROM datetime AT TIME ZONE 'Europe/Helsinki')::int AS hour,
         AVG(price_with_tax) AS avg_price
       FROM prices
-      WHERE datetime AT TIME ZONE 'Europe/Helsinki'
-        >= date_trunc('week', NOW() AT TIME ZONE 'Europe/Helsinki')
-        AND datetime AT TIME ZONE 'Europe/Helsinki'
-        < date_trunc('week', NOW() AT TIME ZONE 'Europe/Helsinki') + interval '7 days'
+      WHERE datetime >= ${start.toISOString()}
+        AND datetime < ${end.toISOString()}
       GROUP BY weekday, hour
       ORDER BY weekday, hour
     `);

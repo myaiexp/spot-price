@@ -1,6 +1,6 @@
 // Live 15-min spot price collection from spot-hinta.fi (TodayAndDayForward).
 import { FETCH_TIMEOUT_MS, httpErrorDetail } from '../utils/http.js';
-import { upsertPrices } from './upsert.js';
+import { upsertPrices, makePriceInsert } from './upsert.js';
 import type { Db } from '../db/connection.js';
 
 const SPOT_HINTA_TODAY_URL = 'https://api.spot-hinta.fi/TodayAndDayForward';
@@ -59,14 +59,9 @@ export async function collectPrices(db: Db): Promise<{ upserted: number }> {
     return { upserted: 0 };
   }
 
-  // Format to 5 decimals to match the prices table's NUMERIC(10,5) scale, so the
-  // stored string is canonical and round-trips through the API unchanged (a bare
-  // String() of a float can emit a 17-digit IEEE-754 artifact).
-  const values = validSlots.map((slot) => ({
-    datetime: slot.DateTime,
-    priceNoTax: slot.PriceNoTax.toFixed(5),
-    priceWithTax: slot.PriceWithTax.toFixed(5),
-  }));
+  const values = validSlots.map((slot) =>
+    makePriceInsert(slot.DateTime, slot.PriceNoTax, slot.PriceWithTax),
+  );
 
   const result = await upsertPrices(db, values);
 
