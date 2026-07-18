@@ -8,6 +8,7 @@ import {
   futureSlots,
   findDeadlineSlotIndex,
   findOptimalWindow,
+  isDeadlineDayUnavailable,
 } from '../../frontend/js/estimator-calc.js';
 
 // Summer (EEST, UTC+3) slot at a Helsinki wall-clock time — deterministic, no DST
@@ -52,6 +53,34 @@ describe('findDeadlineSlotIndex', () => {
   it('returns null when the deadline lands past the last slot', () => {
     const short = [eest(18, 22, 0), eest(18, 23, 0), eest(19, 0, 0), eest(19, 5, 0)];
     expect(findDeadlineSlotIndex(short, 7)).toBeNull(); // rolls to tomorrow, none ≥ 07:00
+  });
+});
+
+describe('isDeadlineDayUnavailable', () => {
+  // Only-today evening slots — a morning deadline rolls to tomorrow, which isn't here.
+  const todayOnlyEvening = [eest(18, 20, 0), eest(18, 21, 0), eest(18, 22, 0), eest(18, 23, 0)];
+  const twoDays = [
+    ...Array.from({ length: 24 }, (_, h) => eest(18, h, 0)),
+    ...Array.from({ length: 24 }, (_, h) => eest(19, h, 0)),
+  ];
+
+  it('is true when a rolled next-day deadline has no matching slots', () => {
+    expect(isDeadlineDayUnavailable(todayOnlyEvening, 7)).toBe(true);
+  });
+
+  it('is false when tomorrow covers the rolled deadline', () => {
+    const evening = twoDays.slice(22); // 22:00 today onward through tomorrow
+    expect(isDeadlineDayUnavailable(evening, 7)).toBe(false);
+  });
+
+  it('is false for a same-day deadline even if past available data', () => {
+    // Deadline 23:00 is still "today" relative to 20:00 start; missing coverage
+    // is a different miss — not the "tomorrow unpublished" case.
+    expect(isDeadlineDayUnavailable(todayOnlyEvening.slice(0, 2), 23)).toBe(false);
+  });
+
+  it('is false with no deadline', () => {
+    expect(isDeadlineDayUnavailable(todayOnlyEvening, null)).toBe(false);
   });
 });
 

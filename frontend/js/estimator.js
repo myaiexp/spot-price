@@ -1,7 +1,11 @@
 // Cost estimator ("Ajoitusavustin"): device chips + power/duration/deadline
 // inputs → cheapest / most expensive charging window and the saving between them.
 import { state } from './state.js';
-import { futureSlots, findOptimalWindow } from './estimator-calc.js';
+import {
+  futureSlots,
+  findOptimalWindow,
+  isDeadlineDayUnavailable,
+} from './estimator-calc.js';
 import { formatTime } from './format.js';
 import { slotBoundaryMs } from './slot-time.js';
 
@@ -93,7 +97,12 @@ export function updateEstimator() {
 
   const result = findOptimalWindow(slots, duration, power, deadlineHour);
   if (!result) {
-    container.innerHTML = '<div class="estimator-no-data">Ei sopivia aikaikkunoita löytynyt</div>';
+    // Deadline rolled to a day we have no slots for (usually tomorrow not yet
+    // published) — say so instead of the generic "no windows" miss.
+    const msg = isDeadlineDayUnavailable(slots, deadlineHour)
+      ? 'Huomisen hintoja ei vielä saatavilla'
+      : 'Ei sopivia aikaikkunoita löytynyt';
+    container.innerHTML = `<div class="estimator-no-data">${msg}</div>`;
     return;
   }
 
