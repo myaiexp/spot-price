@@ -17,12 +17,27 @@ export function main(): void {
     console.log(`Spot price API running on port ${port}`);
   });
 
-  // Graceful shutdown: stop accepting connections, then drain the pg pool so the
-  // process exits cleanly under systemd (SIGTERM) or Ctrl-C (SIGINT) instead of
-  // leaving open sockets for the runtime to force-kill.
+  // Graceful shutdown: stop accepting connections and let in-flight requests
+  // finish, THEN drain the pg pool so the process exits cleanly under systemd
+  // (SIGTERM) or Ctrl-C (SIGINT) instead of leaving open sockets for the runtime
+  // to force-kill. server.close() only stops NEW connections; its callback fires
+  // once existing requests drain — awaiting it is what preserves in-flight work.
+  // A timeout guard bounds the wait so a stuck keep-alive connection cannot block
+  // shutdown forever: after SHUTDOWN_TIMEOUT_MS we drain and exit regardless.
+  const SHUTDOWN_TIMEOUT_MS = 10_000;
   const shutdown = async (signal: string): Promise<void> => {
     console.log(`Received ${signal}, shutting down`);
-    server.close();
+    await new Promise<void>((resolve) => {
+      const timer = setTimeout(() => {
+        console.warn(`Shutdown: server.close did not settle within ${SHUTDOWN_TIMEOUT_MS}ms, draining anyway`);
+        resolve();
+      }, SHUTDOWN_TIMEOUT_MS);
+      timer.unref(); // don't let the guard itself keep the event loop alive
+      server.close(() => {
+        clearTimeout(timer);
+        resolve();
+      });
+    });
     await closeDb(db);
     process.exit(0);
   };

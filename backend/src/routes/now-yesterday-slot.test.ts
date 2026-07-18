@@ -7,56 +7,17 @@
 // trips here and forces a conscious decision.
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { createApp } from '../app.js';
-import type { Db } from '../db/connection.js';
 import { getHelsinkiToday, getHelsinkiDateRange, shiftDate } from '../utils/helsinki-time.js';
 import { taxedRow as slot, type RawRow, type Slot } from '../test-support/rows.js';
-
-// Pull the bound literal values (the right-hand operands of the WHERE comparisons,
-// e.g. the gte/lt ISO bounds on prices.datetime) out of a Drizzle SQL condition,
-// independent of operand order. A Drizzle SQL node nests its parts under
-// `queryChunks`; a bound-parameter chunk carries its literal as a STRING `value`,
-// whereas structural chunks carry an ARRAY `value` (SQL fragments) and column
-// chunks carry neither — so collecting string `value`s yields exactly the bounds.
-function collectBoundValues(node: unknown, out: string[] = []): string[] {
-  if (node === null || typeof node !== 'object') return out;
-  const n = node as { value?: unknown; queryChunks?: unknown[] };
-  if (Array.isArray(n.queryChunks)) {
-    for (const chunk of n.queryChunks) collectBoundValues(chunk, out);
-  } else if (typeof n.value === 'string') {
-    out.push(n.value);
-  }
-  return out;
-}
+import { makeWindowKeyedDb } from '../test-support/window-db.js';
 
 // Fake Db for /now. The handler issues two day-scoped SELECTs — today's slots and
 // yesterday's — each filtering prices.datetime to that day's UTC range with
-// `gte(start) AND lt(end)`. Rather than serving fixtures by call ORDER (fragile:
-// reordering or adding a query would silently return the wrong day's rows), this
-// matches each query to its fixture by the day it actually requests: the lower
-// (gte) bound of the WHERE condition is the start-of-day key looked up in
-// `byDayStart`. An unmapped day throws loudly instead of returning a stale
-// fixture. Rows are pre-scoped per day and seeded ascending, matching the
-// handler's orderBy(asc(datetime)).
-function twoQueryDb(byDayStart: Map<string, RawRow[]>): Db {
-  return {
-    select: () => ({
-      from: () => ({
-        where: (condition: unknown) => {
-          const bounds = collectBoundValues(condition).sort();
-          const dayStart = bounds[0]; // gte lower bound == start-of-day key
-          const rows = byDayStart.get(dayStart);
-          if (!rows) {
-            throw new Error(
-              `twoQueryDb: no fixture for day starting ${String(dayStart)} ` +
-                `(WHERE bounds: ${bounds.join(', ') || 'none'})`,
-            );
-          }
-          return { orderBy: () => Promise.resolve(rows) };
-        },
-      }),
-    }),
-  } as unknown as Db;
-}
+// `gte(start) AND lt(end)`. makeWindowKeyedDb matches each query to its fixture
+// by the day it actually requests (its gte lower bound == start-of-day key),
+// throwing on an unmapped day — so reordering or adding a query can't silently
+// return the wrong day's rows. Rows are pre-scoped per day and seeded ascending,
+// matching the handler's orderBy(asc(datetime)).
 
 async function nowResponse(nowIso: string, todayRows: RawRow[], yesterdayRows: RawRow[]) {
   vi.useFakeTimers({ toFake: ['Date'] });
@@ -70,7 +31,7 @@ async function nowResponse(nowIso: string, todayRows: RawRow[], yesterdayRows: R
     [getHelsinkiDateRange(today).start.toISOString(), todayRows],
     [getHelsinkiDateRange(yesterday).start.toISOString(), yesterdayRows],
   ]);
-  const app = createApp(twoQueryDb(byDayStart));
+  const app = createApp(makeWindowKeyedDb(byDayStart));
   const res = await app.request('/api/prices/now');
   return { status: res.status, body: (await res.json()) as { slot: Slot; percentile: number; yesterdaySlot: Slot | null } };
 }
