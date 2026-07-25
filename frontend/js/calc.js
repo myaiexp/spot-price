@@ -1,6 +1,13 @@
 // Pure price algorithms shared by the insights and chart layers. No DOM, no
 // clock reads — every function is a deterministic transform of a slots array,
 // so it is unit-testable in isolation.
+//
+// Window-bound convention: every returned window end is an EXCLUSIVE slot index
+// named `endExclusive` (one past the last included slot), matching
+// estimator-calc.js. The name carries the semantics on purpose — an `endIndex`
+// that was inclusive here and exclusive there was a standing off-by-one trap for
+// new consumers (audit #5565). An exclusive end also feeds slotBoundaryMs /
+// slotBoundaryLabel directly, which is what every call site wants.
 
 import { helsinkiHourMinute } from './slot-time.js';
 
@@ -49,7 +56,7 @@ export function findCheapestBlock(slots, blockSize = 8) {
   const bestStart = argMin(sums);
   return {
     startIndex: bestStart,
-    endIndex: bestStart + blockSize - 1,
+    endExclusive: bestStart + blockSize,
     avgPrice: sums[bestStart] / blockSize,
   };
 }
@@ -57,6 +64,8 @@ export function findCheapestBlock(slots, blockSize = 8) {
 // Next window at/under the cheapest-third threshold, relative to currentIndex.
 // currentIndex may be -1 (now is before/outside the array) — the "in a cheap
 // slot now" check is then skipped and the forward search starts at slot 0.
+// The in-cheap-now branch reports the run's `endExclusive` (one past its last
+// cheap slot), same bound convention as the block finders.
 export function findNextCheapWindow(slots, currentIndex) {
   if (!slots || slots.length === 0) return null;
   const threshold = priceThreshold(slots, 1 / 3);
@@ -65,7 +74,7 @@ export function findNextCheapWindow(slots, currentIndex) {
   if (inRange && slots[currentIndex].priceWithTax <= threshold) {
     let endIdx = currentIndex;
     while (endIdx < slots.length && slots[endIdx].priceWithTax <= threshold) endIdx++;
-    return { inCheapNow: true, endsAt: endIdx };
+    return { inCheapNow: true, endExclusive: endIdx };
   }
 
   for (let i = Math.max(0, currentIndex + 1); i < slots.length; i++) {
@@ -119,7 +128,7 @@ export function findPeakBlock(slots) {
 
   let sum = 0;
   for (let i = best[0]; i <= best[1]; i++) sum += slots[i].priceWithTax;
-  return { startIndex: best[0], endIndex: best[1], avgPrice: sum / bestLen };
+  return { startIndex: best[0], endExclusive: best[1] + 1, avgPrice: sum / bestLen };
 }
 
 // EMA (α default 0.3) over each wall-clock hour. Buckets are cut at the first

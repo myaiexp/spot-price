@@ -38,7 +38,7 @@ function nextCard(slots, currentIdx) {
   if (next.inCheapNow) {
     return {
       value: 'Nyt!',
-      detail: `Olet halvassa jaksossa (→ ${slotBoundaryLabel(slots, next.endsAt)})`,
+      detail: `Olet halvassa jaksossa (→ ${slotBoundaryLabel(slots, next.endExclusive)})`,
     };
   }
 
@@ -53,11 +53,12 @@ function nextCard(slots, currentIdx) {
   return { value, detail: `Alkaa ${startLabel} (${price})` };
 }
 
-// A block card (cheapest / peak): time span + average price.
+// A block card (cheapest / peak): time span + average price. The block's end is
+// already exclusive, so it feeds slotBoundaryLabel as-is — no +1.
 function blockCard(slots, block) {
   if (!block) return EMPTY_CARD;
   return {
-    value: `${slotBoundaryLabel(slots, block.startIndex)}–${slotBoundaryLabel(slots, block.endIndex + 1)}`,
+    value: `${slotBoundaryLabel(slots, block.startIndex)}–${slotBoundaryLabel(slots, block.endExclusive)}`,
     detail: `Keskihinta ${formatCents(block.avgPrice)} c/kWh`,
   };
 }

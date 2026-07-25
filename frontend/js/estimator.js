@@ -65,11 +65,11 @@ function getEstimatorSlots() {
   return futureSlots(slots, Date.now());
 }
 
-// Format a window {startIndex, endIndex, cost} against the slots array. endIndex
-// is the exclusive window-end slot index; slotBoundaryMs resolves it unclamped so
-// a window abutting the data end shows its true end time (not 15 min early).
+// Format a window {startIndex, endExclusive, cost} against the slots array.
+// slotBoundaryMs resolves the exclusive end unclamped, so a window abutting the
+// data end shows its true end time (not 15 min early).
 function windowLabel(slots, win) {
-  return `${formatTime(slots[win.startIndex].datetime)}–${formatTime(slotBoundaryMs(slots, win.endIndex))}`;
+  return `${formatTime(slots[win.startIndex].datetime)}–${formatTime(slotBoundaryMs(slots, win.endExclusive))}`;
 }
 
 export function updateEstimator() {

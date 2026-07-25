@@ -5,7 +5,7 @@ import { wireToggleGroup } from './ui.js';
 import { renderHero, showError } from './hero.js';
 import { renderChart } from './chart.js';
 import { renderInsights } from './insights.js';
-import { renderHeatmap } from './heatmap.js';
+import { renderHeatmap, showHeatmapError } from './heatmap.js';
 import { updateEstimator, initEstimator } from './estimator.js';
 import { SLOT_MS } from './slot-time.js';
 
@@ -20,9 +20,20 @@ function updateTomorrowTab() {
   }
 }
 
+// Only one load may be in flight: the quarter-hour tick cancels a still-running
+// previous load instead of stacking requests behind it. A rejection whose own
+// controller was aborted is *us* superseding the load, not a failure — the newer
+// load owns the UI from that point, so it must not paint an error.
+let loadController = null;
+
 async function loadAllData() {
+  loadController?.abort();
+  const controller = new AbortController();
+  loadController = controller;
+  const superseded = () => controller.signal.aborted;
+
   try {
-    const [today, yesterday, tomorrow, now] = await fetchAllData();
+    const [today, yesterday, tomorrow, now] = await fetchAllData(controller.signal);
     state.today = today;
     state.yesterday = yesterday;
     state.tomorrow = tomorrow;
@@ -34,17 +45,28 @@ async function loadAllData() {
     renderInsights();
     updateEstimator();
   } catch (err) {
-    console.error('Failed to load data:', err);
-    showError('Tietojen lataus epäonnistui. Yritä myöhemmin uudelleen.');
+    if (!superseded()) {
+      console.error('Failed to load data:', err);
+      showError('Tietojen lataus epäonnistui. Yritä myöhemmin uudelleen.');
+    }
   }
 
-  // Load heatmap separately — it's slow on cold start.
-  fetchHeatmap()
+  if (superseded()) return; // a newer load owns the heatmap too
+
+  // Load heatmap separately — it's slow on cold start. A failure here is shown
+  // in the heatmap card rather than swallowed, which used to strand it on
+  // "Ladataan..." (audit #5561).
+  fetchHeatmap(controller.signal)
     .then((heatmap) => {
       state.heatmap = heatmap;
       renderHeatmap();
     })
-    .catch(() => {});
+    .catch((err) => {
+      if (superseded()) return;
+      console.error('Failed to load heatmap:', err);
+      state.heatmap = null;
+      showHeatmapError();
+    });
 }
 
 // ─── Wiring ──────────────────────────────────────────────────────────

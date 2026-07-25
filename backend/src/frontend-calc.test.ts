@@ -50,7 +50,8 @@ describe('priceThreshold', () => {
 describe('findCheapestBlock', () => {
   it('finds the minimum-sum block and its average', () => {
     const r = findCheapestBlock(fromPrices([5, 5, 1, 1, 5, 5]), 2);
-    expect(r).toEqual({ startIndex: 2, endIndex: 3, avgPrice: 1 });
+    // endExclusive is one past the last included slot (audit #5565).
+    expect(r).toEqual({ startIndex: 2, endExclusive: 4, avgPrice: 1 });
   });
   it('returns null when fewer slots than the block size', () => {
     expect(findCheapestBlock(fromPrices([5]), 2)).toBeNull();
@@ -61,7 +62,7 @@ describe('findNextCheapWindow', () => {
   const slots = fromPrices([1, 1, 1, 5, 5, 5, 9, 9, 9]); // threshold (1/3) = 5
 
   it('reports being in a cheap window now and when it ends', () => {
-    expect(findNextCheapWindow(slots, 4)).toEqual({ inCheapNow: true, endsAt: 6 });
+    expect(findNextCheapWindow(slots, 4)).toEqual({ inCheapNow: true, endExclusive: 6 });
   });
   it('finds the next cheap window ahead with minutes-away', () => {
     const r = findNextCheapWindow(fromPrices([9, 9, 1, 1]), 0); // threshold = 1
@@ -81,14 +82,14 @@ describe('findPeakBlock gap bridging', () => {
     // 10 slots, 100 at [3,4] and [7,8] (gap 5,6 = 2 slots) → merge [3,8].
     const prices = [1, 1, 1, 100, 100, 1, 1, 100, 100, 1];
     const r = findPeakBlock(fromPrices(prices));
-    expect(r).toMatchObject({ startIndex: 3, endIndex: 8 });
+    expect(r).toMatchObject({ startIndex: 3, endExclusive: 9 }); // last slot 8, exclusive end 9
     expect(r!.avgPrice).toBeCloseTo((100 + 100 + 1 + 1 + 100 + 100) / 6, 5);
   });
   it('does NOT bridge a gap of 3 slots, keeping the earliest longest run', () => {
     // 100 at [2..5] and [12..15], gap 6..8..11 (>2) → separate; first wins on tie.
     const prices = [1, 1, 100, 100, 100, 100, 1, 1, 1, 1, 1, 1, 100, 100, 100, 100];
     const r = findPeakBlock(fromPrices(prices));
-    expect(r).toMatchObject({ startIndex: 2, endIndex: 5 });
+    expect(r).toMatchObject({ startIndex: 2, endExclusive: 6 });
   });
   it('returns null when no merged run reaches the 4-slot (1h) minimum', () => {
     expect(findPeakBlock(fromPrices([100, 100, 100]))).toBeNull();

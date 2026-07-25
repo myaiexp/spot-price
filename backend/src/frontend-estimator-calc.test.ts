@@ -88,7 +88,7 @@ describe('findOptimalWindow', () => {
   it('finds the cheapest and most expensive 1h windows', () => {
     const slots = quarterSlots([10, 10, 10, 10, 1, 1, 1, 1, 10, 10, 10, 10]);
     const r = findOptimalWindow(slots, 1, 1, null)!; // 1h = 4 slots, 1 kW
-    expect(r.best).toMatchObject({ startIndex: 4, endIndex: 8 });
+    expect(r.best).toMatchObject({ startIndex: 4, endExclusive: 8 });
     expect(r.best.cost).toBeCloseTo(1, 6); // (4×1)×0.25
     expect(r.worst).toMatchObject({ startIndex: 0 });
     expect(r.worst.cost).toBeCloseTo(10, 6);
@@ -96,20 +96,20 @@ describe('findOptimalWindow', () => {
   });
 
   it('returns an UNCLAMPED end index when the window abuts the data end', () => {
-    // Cheapest window is the last 4 slots → endIndex must be 12 (== length), so the
-    // view resolves the true end instant, not a 15-min-early clamped last slot.
+    // Cheapest window is the last 4 slots → endExclusive must be 12 (== length), so
+    // the view resolves the true end instant, not a 15-min-early clamped last slot.
     const slots = quarterSlots([10, 10, 10, 10, 10, 10, 10, 10, 1, 1, 1, 1]);
     const r = findOptimalWindow(slots, 1, 1, null)!;
     expect(r.best.startIndex).toBe(8);
-    expect(r.best.endIndex).toBe(12);
+    expect(r.best.endExclusive).toBe(12);
   });
 
   it('constrains the search to before the deadline', () => {
     const slots = quarterSlots([1, 1, 1, 1, 5, 5, 5, 5, 9, 9, 9, 9]);
     // deadline 01:00 → maxEnd = slot index 4, only one 1h window fits ([0,4)).
     const r = findOptimalWindow(slots, 1, 1, 1)!;
-    expect(r.best).toMatchObject({ startIndex: 0, endIndex: 4 });
-    expect(r.worst).toMatchObject({ startIndex: 0, endIndex: 4 });
+    expect(r.best).toMatchObject({ startIndex: 0, endExclusive: 4 });
+    expect(r.worst).toMatchObject({ startIndex: 0, endExclusive: 4 });
   });
 
   it('returns null when fewer slots than the requested duration', () => {

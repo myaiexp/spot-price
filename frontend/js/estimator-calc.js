@@ -47,9 +47,10 @@ export function isDeadlineDayUnavailable(slots, deadlineHour) {
 }
 
 // Cheapest and most expensive contiguous windows of `durationHours` within the
-// deadline (if any). endIndex is the exclusive window-end slot index (start +
-// window length) — the view resolves it through slotBoundaryMs, so a window
-// abutting the data end still shows its true end instant.
+// deadline (if any). endExclusive is the exclusive window-end slot index (start +
+// window length), the same bound convention calc.js uses — the view resolves it
+// through slotBoundaryMs, so a window abutting the data end still shows its true
+// end instant.
 export function findOptimalWindow(slots, durationHours, powerKw, deadlineHour) {
   const quarterSlots = Math.ceil(durationHours * 4);
   if (!slots || slots.length < quarterSlots) return null;
@@ -71,8 +72,8 @@ export function findOptimalWindow(slots, durationHours, powerKw, deadlineHour) {
   const worstCost = sums[maxStart] * factor;
 
   return {
-    best: { startIndex: minStart, endIndex: minStart + quarterSlots, cost: bestCost },
-    worst: { startIndex: maxStart, endIndex: maxStart + quarterSlots, cost: worstCost },
+    best: { startIndex: minStart, endExclusive: minStart + quarterSlots, cost: bestCost },
+    worst: { startIndex: maxStart, endExclusive: maxStart + quarterSlots, cost: worstCost },
     savings: worstCost - bestCost,
   };
 }

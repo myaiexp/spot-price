@@ -2,8 +2,23 @@
 // from /porssi/ and the API is proxied at /porssi/api by nginx.
 const API_BASE = '/porssi/api';
 
-export async function fetchJSON(path) {
-  const res = await fetch(`${API_BASE}${path}`);
+// Every request is time-bounded, mirroring the collector's FETCH_TIMEOUT_MS: a
+// bare fetch() never rejects on a stalled response, so a hung proxy would leave
+// the UI on "Ladataan..." forever with no error path (audit #5562).
+export const FETCH_TIMEOUT_MS = 15_000;
+
+// Combine the caller's cancel signal (a superseded refresh) with the timeout, so
+// a request dies on whichever fires first. AbortSignal.any is recent enough to
+// be worth a guard — without it we keep the timeout, which is the part that
+// matters, and merely lose the early cancel.
+function requestSignal(signal) {
+  const timeout = AbortSignal.timeout(FETCH_TIMEOUT_MS);
+  if (!signal) return timeout;
+  return typeof AbortSignal.any === 'function' ? AbortSignal.any([signal, timeout]) : timeout;
+}
+
+export async function fetchJSON(path, signal) {
+  const res = await fetch(`${API_BASE}${path}`, { signal: requestSignal(signal) });
   if (!res.ok) {
     if (res.status === 404) return null;
     throw new Error(`API ${res.status}: ${res.statusText}`);
@@ -12,16 +27,18 @@ export async function fetchJSON(path) {
 }
 
 // The four day/now datasets the initial paint needs, fetched together.
-export function fetchAllData() {
+export function fetchAllData(signal) {
   return Promise.all([
-    fetchJSON('/prices/today'),
-    fetchJSON('/prices/yesterday'),
-    fetchJSON('/prices/tomorrow').catch(() => null),
-    fetchJSON('/prices/now'),
+    fetchJSON('/prices/today', signal),
+    fetchJSON('/prices/yesterday', signal),
+    // Tomorrow is routinely absent before ~14:00; a failure here disables the
+    // tomorrow tab rather than failing the whole paint.
+    fetchJSON('/prices/tomorrow', signal).catch(() => null),
+    fetchJSON('/prices/now', signal),
   ]);
 }
 
 // The heatmap is loaded separately — it's slow on a cold start.
-export function fetchHeatmap() {
-  return fetchJSON('/prices/heatmap');
+export function fetchHeatmap(signal) {
+  return fetchJSON('/prices/heatmap', signal);
 }

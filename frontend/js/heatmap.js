@@ -22,6 +22,17 @@ export function priceToColor(value, min, max) {
   return `hsl(${h}, ${s}%, ${l}%)`;
 }
 
+// Placeholder text for a *failed* heatmap request — deliberately distinct from
+// the "Ei riittävästi tietoja" empty-data state, so a network error isn't read as
+// "this week has no prices". Without it the card sat on "Ladataan..." forever
+// (audit #5561).
+export function showHeatmapError() {
+  document.getElementById('heatmapGrid').style.display = 'none';
+  const placeholder = document.getElementById('heatmapPlaceholder');
+  placeholder.style.display = 'block';
+  placeholder.textContent = 'Lämpökartan lataus epäonnistui';
+}
+
 export function renderHeatmap() {
   const grid = document.getElementById('heatmapGrid');
   const placeholder = document.getElementById('heatmapPlaceholder');
