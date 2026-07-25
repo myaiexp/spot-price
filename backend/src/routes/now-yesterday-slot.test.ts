@@ -33,7 +33,7 @@ async function nowResponse(nowIso: string, todayRows: RawRow[], yesterdayRows: R
   ]);
   const app = createApp(makeWindowKeyedDb(byDayStart));
   const res = await app.request('/api/prices/now');
-  return { status: res.status, body: (await res.json()) as { slot: Slot; percentile: number; yesterdaySlot: Slot | null } };
+  return { status: res.status, body: (await res.json()) as { slot: Slot; cheaperThanPercent: number; yesterdaySlot: Slot | null } };
 }
 
 afterEach(() => {

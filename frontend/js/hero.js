@@ -1,6 +1,7 @@
-// Hero card: the current price headline with percentile tint and freshness note.
+// Hero card: the current price headline with cheap-rank tint and freshness note.
 import { state } from './state.js';
 import { formatCents, formatTime } from './format.js';
+import { heroSignal } from './hero-calc.js';
 
 export function showError(msg) {
   document.getElementById('heroPrice').innerHTML = `<div class="error-msg">${msg}</div>`;
@@ -16,23 +17,16 @@ export function renderHero() {
   }
 
   const priceCents = formatCents(state.now.slot.priceWithTax);
-  const percentile = state.now.percentile;
 
-  // Color tint based on percentile
-  let tintColor;
-  if (percentile >= 70) {
-    tintColor = 'rgba(34, 197, 94, 0.08)';
-  } else if (percentile >= 30) {
-    tintColor = 'rgba(232, 163, 8, 0.08)';
-  } else {
-    tintColor = 'rgba(239, 68, 68, 0.08)';
+  // Tint + caption from the cheap-rank. Polarity and thresholds live in
+  // hero-calc so they stay pinned by unit tests (see heroBand).
+  const signal = heroSignal(state.now.cheaperThanPercent);
+  tint.style.background = signal.tint;
+
+  let html = `<div class="hero-card__price">${priceCents}<span>c/kWh</span></div>`;
+  if (signal.context) {
+    html += `<div class="hero-card__context">${signal.context}</div>`;
   }
-  tint.style.background = tintColor;
-
-  let html = `
-    <div class="hero-card__price">${priceCents}<span>c/kWh</span></div>
-    <div class="hero-card__context">Halvempi kuin ${percentile}% tänään</div>
-  `;
 
   if (state.now.yesterdaySlot) {
     const yPrice = formatCents(state.now.yesterdaySlot.priceWithTax);

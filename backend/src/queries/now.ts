@@ -1,14 +1,24 @@
-// /now current-slot query: percentile among today, yesterday's same-time slot, cache.
+// /now current-slot query: cheap-rank among today, yesterday's same-time slot, cache.
 
 import type { Db } from '../db/connection.js';
 import { getHelsinkiToday, helsinkiMinutesOfDay, shiftDate } from '../utils/helsinki-time.js';
 import { createTimeKeyedCache } from '../utils/time-keyed-cache.js';
 import { getSlotsForDate, type PriceSlot } from './day.js';
 
-/** Successful /now payload: current slot, its percentile among today, yesterday's same-time slot, and freshness. */
+/** Successful /now payload: current slot, its cheap-rank among today, yesterday's same-time slot, and freshness. */
 interface NowResponse {
   slot: PriceSlot;
-  percentile: number;
+  /**
+   * Share (0–100) of today's slots that cost MORE than the current one — i.e.
+   * literally "this price is cheaper than N% of today". High = cheap.
+   *
+   * The direction is baked into the name on purpose: the field used to be a
+   * bottom-up `percentile` (share of slots *cheaper* than the current one, so
+   * high = expensive), which the hero card read as a cheap signal and painted
+   * peak prices green (audit #5549/#5563). Both ends of the wire now speak the
+   * same polarity, and the name says which.
+   */
+  cheaperThanPercent: number;
   yesterdaySlot: PriceSlot | null;
   stale: boolean;
 }
@@ -37,7 +47,7 @@ function slotWindowEndMs(slots: PriceSlot[], i: number): number {
 
 /**
  * Compute the /now payload for instant `now` and Helsinki day `today`: the
- * current 15-minute slot, its percentile among today, yesterday's same-time
+ * current 15-minute slot, its cheap-rank among today, yesterday's same-time
  * slot, and a stale flag. Issues the two day-scoped DB reads (today + yesterday);
  * the caching closure reuses the result so polls within a slot don't repeat them.
  */
@@ -62,9 +72,12 @@ async function computeNowResponse(db: Db, now: Date, today: string): Promise<Now
   const stale = activeSlot === undefined;
   const currentSlot = activeSlot ?? todaySlots[todaySlots.length - 1];
 
-  // Calculate percentile: what % of today's slots are cheaper
-  const cheaperCount = todaySlots.filter(s => s.priceWithTax < currentSlot.priceWithTax).length;
-  const percentile = Math.round((cheaperCount / todaySlots.length) * 100);
+  // Cheap-rank: what % of today's slots cost more than the current one. Ties
+  // (the 15-min slots of one hourly source price share a value) count for
+  // neither side, so an all-flat day reads 0 — nothing is dearer — rather than
+  // claiming the price beats the whole day.
+  const dearerCount = todaySlots.filter(s => s.priceWithTax > currentSlot.priceWithTax).length;
+  const cheaperThanPercent = Math.round((dearerCount / todaySlots.length) * 100);
 
   // Find yesterday's slot at the same Helsinki WALL-CLOCK time-of-day.
   //
@@ -87,7 +100,7 @@ async function computeNowResponse(db: Db, now: Date, today: string): Promise<Now
     (slot) => helsinkiMinutesOfDay(new Date(slot.datetime)) === currentMinutes,
   ) ?? null;
 
-  return { body: { slot: currentSlot, percentile, yesterdaySlot, stale }, status: 200 };
+  return { body: { slot: currentSlot, cheaperThanPercent, yesterdaySlot, stale }, status: 200 };
 }
 
 /**

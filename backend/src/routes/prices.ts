@@ -42,7 +42,7 @@ export function pricesRoutes(db: Db): Hono {
   registerDayRoute(router, db, '/yesterday', -1);
   registerDayRoute(router, db, '/tomorrow', 1, 'Tomorrow prices not yet available');
 
-  // GET /now — current 15-minute slot, percentile among today, and yesterday's
+  // GET /now — current 15-minute slot, cheap-rank among today, and yesterday's
   // same-time slot. Polled live by the frontend; getNow caches per Helsinki
   // 15-minute slot (see createNowQuery).
   router.get('/now', async (c) => {

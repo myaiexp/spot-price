@@ -11,7 +11,7 @@ import { createApp } from '../app.js';
 import { makeSelectDb as seededDb } from '../test-support/fake-db.js';
 import { row, type RawRow, type Slot } from '../test-support/rows.js';
 
-type NowBody = { slot: Slot; percentile: number; yesterdaySlot: Slot | null; stale: boolean };
+type NowBody = { slot: Slot; cheaperThanPercent: number; yesterdaySlot: Slot | null; stale: boolean };
 
 async function nowAt(nowIso: string, rows: RawRow[]): Promise<{ status: number; body: NowBody }> {
   vi.useFakeTimers({ toFake: ['Date'] });
@@ -40,8 +40,9 @@ describe('GET /now stale fallback (audit #3)', () => {
     expect(status).toBe(200);
     expect(body.stale).toBe(true);
     expect(body.slot.datetime).toBe('2026-01-15T12:30:00.000Z');
-    // Percentile is still computed against today's slots (last slot is dearest).
-    expect(body.percentile).toBe(67); // round(2/3 * 100)
+    // The cheap-rank is still computed against today's slots — and the served
+    // slot is the dearest of them, so nothing costs more.
+    expect(body.cheaperThanPercent).toBe(0);
   });
 
   it('now exactly at the last slot window end -> stale (boundary is exclusive)', async () => {
