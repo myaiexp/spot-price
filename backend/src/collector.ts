@@ -6,7 +6,7 @@
 //
 // Usage: `tsx src/collector.ts`                  live 15-min collect
 //        `tsx src/collector.ts --backfill`        full history backfill
-//        `tsx src/collector.ts --backfill=DATE`   resume backfill from an ISO date
+//        `tsx src/collector.ts --backfill=DATE`   resume walk from an exclusive upper bound
 import { config } from 'dotenv';
 import { createDb } from './db/connection.js';
 import { collectPrices } from './collectors/spot-hinta.js';
@@ -23,14 +23,15 @@ if (!databaseUrl) {
 const db = createDb(databaseUrl);
 
 // `--backfill` runs a full history backfill; `--backfill=2024-01-01` resumes from
-// an explicit UTC upper bound instead of re-walking from today.
+// an explicit exclusive upper bound (walks backwards from that instant) instead
+// of re-walking from Helsinki today midnight.
 const backfillArg = process.argv.find(
   (a) => a === '--backfill' || a.startsWith('--backfill='),
 );
 
 try {
   if (backfillArg) {
-    let startFrom: Date | undefined;
+    let walkBackFrom: Date | undefined;
     const eq = backfillArg.indexOf('=');
     if (eq !== -1) {
       const dateStr = backfillArg.slice(eq + 1);
@@ -41,9 +42,9 @@ try {
         );
         process.exit(1);
       }
-      startFrom = parsed;
+      walkBackFrom = parsed;
     }
-    const result = await backfillPrices(db, startFrom ? { startFrom } : {});
+    const result = await backfillPrices(db, walkBackFrom ? { walkBackFrom } : {});
     console.log(`Backfill complete: ${result.totalUpserted} total rows upserted`);
   } else {
     const result = await collectPrices(db);

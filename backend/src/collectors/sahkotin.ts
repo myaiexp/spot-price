@@ -1,6 +1,7 @@
 // Historical hourly backfill from sahkotin.fi (EUR/MWh → EUR/kWh × VAT).
 import { FETCH_TIMEOUT_MS, httpErrorDetail } from '../utils/http.js';
 import { mwhToKwh, applyVat } from '../utils/price-conversion.js';
+import { getHelsinkiToday, getHelsinkiDateRange } from '../utils/helsinki-time.js';
 import { upsertPrices, makePriceInsert } from './upsert.js';
 import type { Db } from '../db/connection.js';
 
@@ -78,10 +79,10 @@ export async function fetchSahkotinPrices(start: string, end: string): Promise<S
  *
  * `opts` exists to give callers/tests a seam over the three values that otherwise
  * depend on wall-clock / upstream timing:
- *   - `startFrom`     the EXCLUSIVE upper bound to begin walking back from
- *                     (defaults to today's UTC midnight). Pass an earlier date to
- *                     resume an interrupted backfill instead of re-walking the
- *                     whole history every run.
+ *   - `walkBackFrom`  the EXCLUSIVE upper bound to begin walking back from
+ *                     (defaults to Helsinki local midnight of the current Helsinki
+ *                     day). Pass an earlier instant to resume an interrupted
+ *                     backfill instead of re-walking the whole history every run.
  *   - `maxChunks`     the runaway safety cap (defaults to backfillMaxChunks(end)).
  *   - `requestDelayMs` the inter-request pause (defaults to the production value).
  * All default to the production values, so a plain `backfillPrices(db)` behaves
@@ -89,23 +90,25 @@ export async function fetchSahkotinPrices(start: string, end: string): Promise<S
  */
 export async function backfillPrices(
   db: Db,
-  opts: { maxChunks?: number; requestDelayMs?: number; startFrom?: Date } = {},
+  opts: { maxChunks?: number; requestDelayMs?: number; walkBackFrom?: Date } = {},
 ): Promise<{ totalUpserted: number }> {
   let totalUpserted = 0;
   const chunkDays = BACKFILL_CHUNK_DAYS;
   const requestDelayMs = opts.requestDelayMs ?? BACKFILL_REQUEST_DELAY_MS;
 
   // `end` is the EXCLUSIVE upper bound of the fetch window; the walk moves
-  // backwards from here. It defaults to today's UTC midnight — so the most recent
-  // slot fetched is yesterday's last hour (today 00:00Z is excluded), and
-  // today/tomorrow stay owned by the live collectPrices job (spot-hinta.fi
-  // TodayAndDayForward, every 15 min). Do NOT subtract a day — the bound is a
-  // precise instant, not a date, so doing so would drop most of yesterday's data.
-  // Callers may pass `startFrom` to resume from an earlier boundary; we clone it
-  // so the reassignment below never mutates the caller's Date.
-  const now = new Date();
-  const defaultEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  let end = opts.startFrom ? new Date(opts.startFrom.getTime()) : defaultEnd;
+  // backwards from here. It defaults to Helsinki local midnight of the current
+  // Helsinki day — so the most recent slot fetched is Helsinki yesterday's last
+  // hour, and Helsinki today/tomorrow stay owned by the live collectPrices job
+  // (spot-hinta.fi TodayAndDayForward, every 15 min). UTC midnight would be
+  // 02:00/03:00 Helsinki and would overwrite early-today hour-start rows with
+  // sahkotin hourly values while :15/:30/:45 quarters remain (mixed granularity).
+  // Do NOT subtract a day — the bound is a precise instant, not a date, so doing
+  // so would drop most of yesterday's data. Callers may pass `walkBackFrom` to
+  // resume from an earlier boundary; we clone it so the reassignment below never
+  // mutates the caller's Date.
+  const defaultEnd = getHelsinkiDateRange(getHelsinkiToday()).start;
+  let end = opts.walkBackFrom ? new Date(opts.walkBackFrom.getTime()) : defaultEnd;
 
   let chunkIndex = 0;
 
