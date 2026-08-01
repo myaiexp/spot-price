@@ -1,6 +1,6 @@
 // Tests for the frontend's pure price algorithms (../../frontend/js/calc.js):
-// window sums, cheapest block, next-cheap window, peak-block gap bridging, and
-// DST-aware EMA hour bucketing (23h/25h days).
+// window sums, cheapest block, next-cheap window, peak-block gap bridging,
+// DST-aware EMA hour bucketing (23h/25h days), and wall-clock ghost alignment.
 
 import { describe, it, expect } from 'vitest';
 import {
@@ -10,6 +10,7 @@ import {
   findNextCheapWindow,
   findPeakBlock,
   emaAggregate,
+  alignSecondaryByWallClock,
 } from '../../frontend/js/calc.js';
 
 const fromPrices = (prices: number[]) =>
@@ -122,6 +123,137 @@ describe('emaAggregate DST hour bucketing', () => {
     expect(hourly).toHaveLength(25);
     const threes = hourly.filter((h) => helsinkiHour(h.datetime) === 3);
     expect(threes).toHaveLength(2);
+  });
+});
+
+describe('alignSecondaryByWallClock (audit #6332)', () => {
+  it('returns [] for empty secondary so the ghost series can be skipped', () => {
+    const primary = stepSlots('2026-07-17T21:00:00Z', 4);
+    expect(alignSecondaryByWallClock(primary, [])).toEqual([]);
+    expect(alignSecondaryByWallClock(primary, null as unknown as [])).toEqual([]);
+  });
+
+  it('matches equal-length normal days by wall-clock (same as zip-by-index)', () => {
+    // Helsinki 2026-07-18 vs 2026-07-17, both 96 slots starting at local midnight.
+    const primary = stepSlots('2026-07-17T21:00:00Z', 96);
+    const secondary = stepSlots('2026-07-16T21:00:00Z', 96).map((s, i) => ({
+      ...s,
+      priceWithTax: 1000 + i,
+    }));
+    const aligned = alignSecondaryByWallClock(primary, secondary);
+    expect(aligned).toHaveLength(96);
+    expect(aligned[0]).toBe(1000);
+    expect(aligned[4]).toBe(1004);
+    expect(aligned[95]).toBe(1095);
+  });
+
+  it('inserts nulls for spring-forward gap hours when primary is a normal day', () => {
+    // Primary: normal 96-slot day (has 03:00–03:45). Secondary: spring-forward
+    // 92 slots (skips 03:00–03:45). Zip-by-index would shift everything after 03:00.
+    const primary = stepSlots('2026-07-17T21:00:00Z', 96); // 2026-07-18
+    const secondary = stepSlots('2026-03-28T22:00:00Z', 92).map((s, i) => ({
+      ...s,
+      priceWithTax: i + 0.5,
+    }));
+    const aligned = alignSecondaryByWallClock(primary, secondary);
+    expect(aligned).toHaveLength(96);
+
+    // 03:00 is slot index 12 on a normal day (00:00 + 12*15min).
+    for (let i = 12; i < 16; i++) {
+      expect(aligned[i], `primary slot ${i} (03:xx) should be null`).toBeNull();
+    }
+    // 02:45 (index 11) and 04:00 (index 16) still line up by wall-clock.
+    expect(aligned[11]).toBe(11.5);
+    // On spring-forward secondary, the slot after 02:45 is 04:00 at index 12.
+    expect(aligned[16]).toBe(12.5);
+    // Last primary slot 23:45 maps to secondary's last slot (index 91).
+    expect(aligned[95]).toBe(91.5);
+  });
+
+  it('drops secondary-only spring-forward mismatch when primary skips hour 3', () => {
+    // Primary spring-forward (92); secondary normal (96). Extra secondary 03:xx
+    // never appear on the axis; primary length is preserved.
+    const primary = stepSlots('2026-03-28T22:00:00Z', 92);
+    const secondary = stepSlots('2026-07-17T21:00:00Z', 96).map((s, i) => ({
+      ...s,
+      priceWithTax: i,
+    }));
+    const aligned = alignSecondaryByWallClock(primary, secondary);
+    expect(aligned).toHaveLength(92);
+    expect(aligned.every((v) => v != null)).toBe(true);
+    // Primary 02:45 (index 11) → secondary 02:45 (11); primary 04:00 (12) → secondary 16.
+    expect(aligned[11]).toBe(11);
+    expect(aligned[12]).toBe(16);
+  });
+
+  it('aligns pure-hourly secondary onto a 15-min primary (nulls for non-:00 slots)', () => {
+    // Backfill ghost: 24 hourly points vs 96 quarter-hour primary.
+    const primary = stepSlots('2026-07-17T21:00:00Z', 96);
+    const hourlySecondary = [];
+    for (let h = 0; h < 24; h++) {
+      hourlySecondary.push({
+        datetime: new Date(Date.parse('2026-07-16T21:00:00Z') + h * 60 * 60 * 1000).toISOString(),
+        priceWithTax: h * 10,
+        priceNoTax: h * 10,
+      });
+    }
+    const aligned = alignSecondaryByWallClock(primary, hourlySecondary);
+    expect(aligned).toHaveLength(96);
+    // Only :00 slots get a value; the other three quarters of each hour are null.
+    for (let i = 0; i < 96; i++) {
+      if (i % 4 === 0) expect(aligned[i]).toBe((i / 4) * 10);
+      else expect(aligned[i]).toBeNull();
+    }
+  });
+
+  it('aligns by hour bucket in hourly mode across 23 vs 24 buckets', () => {
+    const primary = emaAggregate(stepSlots('2026-07-17T21:00:00Z', 96)); // 24
+    const secondary = emaAggregate(stepSlots('2026-03-28T22:00:00Z', 92)).map((s, i) => ({
+      ...s,
+      priceWithTax: i + 1,
+    })); // 23, no hour 3
+    expect(primary).toHaveLength(24);
+    expect(secondary).toHaveLength(23);
+
+    const aligned = alignSecondaryByWallClock(primary, secondary, { hourly: true });
+    expect(aligned).toHaveLength(24);
+    // Hour 3 on primary has no secondary counterpart.
+    expect(aligned[3]).toBeNull();
+    // Hours 0–2 line up 1:1; hour 4 primary maps to secondary index 3 (skip hour 3).
+    expect(aligned[0]).toBe(1);
+    expect(aligned[2]).toBe(3);
+    expect(aligned[4]).toBe(4);
+    expect(aligned[23]).toBe(23);
+  });
+
+  it('consumes fall-back duplicate hour-3 buckets in order in hourly mode', () => {
+    const primary = emaAggregate(stepSlots('2026-10-24T21:00:00Z', 100)); // 25, hour 3 ×2
+    const secondary = emaAggregate(stepSlots('2026-10-24T21:00:00Z', 100)).map((s, i) => ({
+      ...s,
+      priceWithTax: 100 + i,
+    }));
+    expect(primary).toHaveLength(25);
+
+    const aligned = alignSecondaryByWallClock(primary, secondary, { hourly: true });
+    expect(aligned).toHaveLength(25);
+    // Both hour-3 primary buckets get their own secondary values (indices 3 and 4).
+    expect(aligned[3]).toBe(103);
+    expect(aligned[4]).toBe(104);
+    expect(aligned[5]).toBe(105); // hour 4
+  });
+
+  it('reuses the single secondary hour-3 when primary is fall-back and secondary is normal', () => {
+    const primary = emaAggregate(stepSlots('2026-10-24T21:00:00Z', 100)); // 25
+    const secondary = emaAggregate(stepSlots('2026-07-17T21:00:00Z', 96)).map((s, i) => ({
+      ...s,
+      priceWithTax: i,
+    })); // 24
+    const aligned = alignSecondaryByWallClock(primary, secondary, { hourly: true });
+    expect(aligned).toHaveLength(25);
+    // Primary has two hour-3 buckets; secondary has one → reuse last.
+    expect(aligned[3]).toBe(3);
+    expect(aligned[4]).toBe(3);
+    expect(aligned[5]).toBe(4);
   });
 });
 

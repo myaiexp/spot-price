@@ -1,6 +1,6 @@
 // Pure price algorithms shared by the insights and chart layers. No DOM, no
 // clock reads — every function is a deterministic transform of a slots array,
-// so it is unit-testable in isolation.
+// so it is unit-testable in isolation. Includes wall-clock ghost alignment.
 //
 // Window-bound convention: every returned window end is an EXCLUSIVE slot index
 // named `endExclusive` (one past the last included slot), matching
@@ -9,7 +9,7 @@
 // new consumers (audit #5565). An exclusive end also feeds slotBoundaryMs /
 // slotBoundaryLabel directly, which is what every call site wants.
 
-import { helsinkiHourMinute } from './slot-time.js';
+import { helsinkiHourMinute, helsinkiMinutesOfDay } from './slot-time.js';
 
 // First index of the minimum value (ties → earliest), matching the original
 // strict-`<` scan bookkeeping.
@@ -151,5 +151,45 @@ export function emaAggregate(slots, alpha = 0.3) {
       emaNoTax = alpha * quarter[i].priceNoTax + (1 - alpha) * emaNoTax;
     }
     return { datetime: quarter[0].datetime, priceNoTax: emaNoTax, priceWithTax: ema };
+  });
+}
+
+// Align a secondary day's prices onto the primary day's category axis by
+// Helsinki wall-clock time-of-day (not array index). Zip-by-index drifts on
+// 23h/25h DST days and is useless when secondary is pure-hourly backfill
+// against a 15-min primary (audit #6332).
+//
+// Returns one entry per primary slot: priceWithTax, or null when secondary has
+// no matching wall-clock key. Empty secondary → [] so callers can skip the
+// ghost series. Fall-back duplicates (two 03:xx) are consumed in order; if
+// primary has more copies than secondary, the last secondary value is reused.
+export function alignSecondaryByWallClock(primarySlots, secondarySlots, { hourly = false } = {}) {
+  if (!secondarySlots || secondarySlots.length === 0) return [];
+  if (!primarySlots || primarySlots.length === 0) return [];
+
+  const keyOf = hourly
+    ? (s) => helsinkiHourMinute(s.datetime).hour
+    : (s) => helsinkiMinutesOfDay(s.datetime);
+
+  const buckets = new Map();
+  for (const s of secondarySlots) {
+    const k = keyOf(s);
+    let arr = buckets.get(k);
+    if (!arr) {
+      arr = [];
+      buckets.set(k, arr);
+    }
+    arr.push(s.priceWithTax);
+  }
+
+  const cursor = new Map();
+  return primarySlots.map((s) => {
+    const k = keyOf(s);
+    const arr = buckets.get(k);
+    if (!arr) return null;
+    const i = cursor.get(k) ?? 0;
+    if (i >= arr.length) return arr[arr.length - 1];
+    cursor.set(k, i + 1);
+    return arr[i];
   });
 }

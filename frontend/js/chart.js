@@ -1,6 +1,6 @@
 // Price chart (Chart.js): area/bar × 15min/hourly, with a "now" marker on today.
 import { state } from './state.js';
-import { emaAggregate } from './calc.js';
+import { emaAggregate, alignSecondaryByWallClock } from './calc.js';
 import { eurToCents, slotLabel, hourLabel } from './format.js';
 import { findSlotContaining, SLOT_MS, HOUR_MS } from './slot-time.js';
 
@@ -53,7 +53,12 @@ export function renderChart() {
     ? primarySlots.map((s) => hourLabel(s.datetime))
     : primarySlots.map((s) => slotLabel(s.datetime));
   const primaryData = primarySlots.map((s) => eurToCents(s.priceWithTax));
-  const secondaryData = secondarySlots.map((s) => eurToCents(s.priceWithTax));
+  // Ghost series: match secondary to primary by Helsinki wall-clock, not index
+  // (DST length mismatch + hourly-backfill vs 15-min primary; audit #6332).
+  const secondaryAligned = alignSecondaryByWallClock(primarySlots, secondarySlots, {
+    hourly: isHourly,
+  });
+  const secondaryData = secondaryAligned.map((p) => (p == null ? null : eurToCents(p)));
 
   const secondaryLabel = isToday ? 'Eilen' : 'Tänään';
   const primaryLabel = isToday ? 'Tänään' : 'Huomenna';
@@ -192,6 +197,7 @@ export function renderChart() {
               return items[0].label;
             },
             label: function (context) {
+              if (context.parsed.y == null) return `${context.dataset.label}: —`;
               return `${context.dataset.label}: ${context.parsed.y.toFixed(2)} c/kWh`;
             },
           },
