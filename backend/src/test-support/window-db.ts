@@ -7,12 +7,18 @@ import type { Db } from '../db/connection.js';
 
 // Pull the bound literal values (the right-hand operands of the WHERE
 // comparisons, e.g. the gte/lt ISO bounds on prices.datetime) out of a Drizzle
-// SQL condition, independent of operand order. A Drizzle SQL node nests its
-// parts under `queryChunks`; a bound-parameter chunk carries its literal as a
-// STRING `value`, whereas structural chunks carry an ARRAY `value` (SQL
-// fragments) and column chunks carry neither — so collecting string `value`s
-// yields exactly the bounds.
+// SQL node, independent of operand order. A SQL node nests parts under
+// `queryChunks`. Bound values show up in two shapes: a Param chunk whose
+// STRING `value` is the literal (drizzle `gte`/`lt` operators), or a raw
+// string chunk (sql`…${iso}…` interpolations — sql() pushes the interpolated
+// value as-is, not wrapped in Param). Structural chunks carry an ARRAY
+// `value` (SQL fragments) and column chunks carry neither — those are skipped,
+// so collecting strings yields exactly the bounds.
 export function collectBoundValues(node: unknown, out: string[] = []): string[] {
+  if (typeof node === 'string') {
+    if (node.length > 0) out.push(node);
+    return out;
+  }
   if (node === null || typeof node !== 'object') return out;
   const n = node as { value?: unknown; queryChunks?: unknown[] };
   if (Array.isArray(n.queryChunks)) {
@@ -23,16 +29,27 @@ export function collectBoundValues(node: unknown, out: string[] = []): string[] 
   return out;
 }
 
+// Concatenate Drizzle SQL string fragments, skipping bound parameters. Used
+// to assert operators / EXTRACT names that bound-value capture cannot see.
+export function flattenSqlText(node: unknown): string {
+  if (node === null || typeof node !== 'object') return '';
+  const n = node as { queryChunks?: unknown[]; value?: unknown };
+  if (Array.isArray(n.queryChunks)) return n.queryChunks.map(flattenSqlText).join('');
+  if (Array.isArray(n.value)) return n.value.filter((v): v is string => typeof v === 'string').join('');
+  return '';
+}
+
 // The [gte, lt) window a single SELECT queried, as ISO strings.
 export interface QueryWindow {
   gte: string;
   lt: string;
 }
 
-// Extract the [gte, lt) window from a Drizzle `and(gte(...), lt(...))`
-// condition. The two bound literals sort chronologically (same ISO format, so
-// lexicographic == chronological), so the lower is gte and the upper is lt.
-function windowOf(condition: unknown): QueryWindow {
+// Extract the [gte, lt) window from a Drizzle SQL node (an `and(gte, lt)`
+// condition or a sql`…` template with two ISO interpolations). The two bound
+// literals sort chronologically (same ISO format, so lexicographic ==
+// chronological), so the lower is gte and the upper is lt.
+export function windowOf(condition: unknown): QueryWindow {
   const [gte, lt] = collectBoundValues(condition).sort();
   return { gte, lt };
 }

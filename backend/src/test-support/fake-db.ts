@@ -5,6 +5,7 @@
 // same `as unknown as Db` casts before — the fakes' contract now lives here, so a
 // change to the Db shape is a one-file edit instead of a dozen.
 import type { Db } from '../db/connection.js';
+import { windowOf, type QueryWindow } from './window-db.js';
 
 // Db whose select-chain (from → where → orderBy) resolves to `rows`, ignoring the
 // WHERE clause — the seeded rows answer whichever day/range a handler queries, so
@@ -82,15 +83,30 @@ export interface HeatmapCell {
 // constant week, or an array used as a queue — one entry consumed per getHeatmap
 // call, so a cache MISS draws the next number and a HIT draws none, making cache
 // behaviour observable.
-export function makeHeatmapExecuteDb(cells: HeatmapCell[], weekNumbers: number | number[]): Db {
+//
+// The first execute of each pair is the week-window aggregation: lastCellQuery
+// / lastWindow capture that SQL node so tests can assert the [Mon 00:00, next
+// Mon 00:00) ISO bounds (and EXTRACT/GROUP BY text) instead of trusting canned
+// cells. The week-number execute has no parameters and is not captured.
+export interface HeatmapExecuteDb extends Db {
+  lastCellQuery: () => unknown;
+  lastWindow: () => QueryWindow | null;
+}
+
+export function makeHeatmapExecuteDb(
+  cells: HeatmapCell[],
+  weekNumbers: number | number[],
+): HeatmapExecuteDb {
   const queue = Array.isArray(weekNumbers) ? weekNumbers : [weekNumbers];
   const constant = !Array.isArray(weekNumbers);
   let pairIndex = 0;
   let callInPair = 0;
-  return {
-    execute: async () => {
+  let lastCellQuery: unknown = null;
+  const db = {
+    execute: async (query?: unknown) => {
       callInPair += 1;
       if (callInPair === 1) {
+        lastCellQuery = query ?? null;
         return { rows: cells };
       }
       callInPair = 0;
@@ -98,7 +114,11 @@ export function makeHeatmapExecuteDb(cells: HeatmapCell[], weekNumbers: number |
       pairIndex += 1;
       return { rows: [{ week_number: wk }] };
     },
-  } as unknown as Db;
+    lastCellQuery: () => lastCellQuery,
+    lastWindow: (): QueryWindow | null =>
+      lastCellQuery == null ? null : windowOf(lastCellQuery),
+  } as unknown as HeatmapExecuteDb;
+  return db;
 }
 
 // Insert-chain fake that records the rows handed to .values(), so a test can

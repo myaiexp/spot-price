@@ -54,6 +54,12 @@ export function createHeatmap(): (db: Db) => Promise<HeatmapResponse> {
     // scan of the entire prices history on every cache miss, though the query
     // only ever needs the current week's ~700 rows. AT TIME ZONE stays in the
     // SELECT, where it groups the already-narrowed rows by local weekday/hour.
+    //
+    // GROUP BY local hour is a 24-column grid: on the fall-back Sunday
+    // EXTRACT(HOUR) returns 3 for both the EEST 03:00 and the EET 03:00, so AVG
+    // merges those two hours into one cell. That is intentional — the heatmap
+    // has no 25th column. The chart's emaAggregate keeps 25 distinct buckets
+    // because it is a time series, not a 7×24 matrix.
     const { start } = getHelsinkiDateRange(weekKey);
     const { end } = getHelsinkiDateRange(shiftDate(weekKey, 6));
     const rows = await db.execute(sql`
