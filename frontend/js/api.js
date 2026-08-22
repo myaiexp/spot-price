@@ -26,20 +26,25 @@ export async function fetchJSON(path, signal) {
   return res.json();
 }
 
+// Optional day datasets (unpublished tomorrow, or a blip on yesterday's ghost
+// series) must not fail the whole paint. A *caller* abort (superseded refresh)
+// still rejects — swallowing it as null lets a stale load resolve and overwrite
+// the newer paint (finding #7108). Timeout AbortError does not abort `signal`,
+// so it still degrades to null. Yesterday used to reject Promise.all and blank
+// the dashboard even when today/now succeeded (finding #7117).
+function optionalJson(path, signal) {
+  return fetchJSON(path, signal).catch((err) => {
+    if (signal?.aborted) throw err;
+    return null;
+  });
+}
+
 // The four day/now datasets the initial paint needs, fetched together.
 export function fetchAllData(signal) {
   return Promise.all([
     fetchJSON('/prices/today', signal),
-    fetchJSON('/prices/yesterday', signal),
-    // Tomorrow is routinely absent before ~14:00; a failure here disables the
-    // tomorrow tab rather than failing the whole paint. A *caller* abort
-    // (superseded refresh) must still reject — swallowing it as null lets a
-    // stale load resolve and overwrite the newer paint (finding #7108).
-    // Timeout AbortError does not abort `signal`, so it still degrades to null.
-    fetchJSON('/prices/tomorrow', signal).catch((err) => {
-      if (signal?.aborted) throw err;
-      return null;
-    }),
+    optionalJson('/prices/yesterday', signal),
+    optionalJson('/prices/tomorrow', signal),
     fetchJSON('/prices/now', signal),
   ]);
 }

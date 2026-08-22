@@ -64,6 +64,20 @@ describe('fetchAllData', () => {
     expect(tomorrow).toBeNull();
   });
 
+  it('degrades a failed yesterday fetch to null instead of failing the paint (finding #7117)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.endsWith('/prices/yesterday')) throw new Error('network down');
+        return { ok: true, status: 200, statusText: 'OK', json: async () => ({ slots: [] }) };
+      }),
+    );
+    const [today, yesterday, , now] = await fetchAllData();
+    expect(today).toEqual({ slots: [] });
+    expect(yesterday).toBeNull();
+    expect(now).toEqual({ slots: [] });
+  });
+
   it('does not swallow a caller-aborted tomorrow fetch into a resolved null', async () => {
     const controller = new AbortController();
     controller.abort();
@@ -77,6 +91,36 @@ describe('fetchAllData', () => {
       }),
     );
     await expect(fetchAllData(controller.signal)).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
+  it('does not swallow a caller-aborted yesterday fetch into a resolved null', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.endsWith('/prices/yesterday')) {
+          throw new DOMException('The operation was aborted.', 'AbortError');
+        }
+        return { ok: true, status: 200, statusText: 'OK', json: async () => ({ slots: [] }) };
+      }),
+    );
+    await expect(fetchAllData(controller.signal)).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
+  it('still degrades a timeout-aborted yesterday fetch to null', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.endsWith('/prices/yesterday')) {
+          throw new DOMException('The operation was aborted.', 'AbortError');
+        }
+        return { ok: true, status: 200, statusText: 'OK', json: async () => ({ slots: [] }) };
+      }),
+    );
+    const [today, yesterday] = await fetchAllData(new AbortController().signal);
+    expect(today).toEqual({ slots: [] });
+    expect(yesterday).toBeNull();
   });
 
   it('still degrades a timeout-aborted tomorrow fetch to null', async () => {

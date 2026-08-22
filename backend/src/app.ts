@@ -11,10 +11,15 @@ export function createApp(db: Db): Hono {
 
   // Dev origin is excluded in production to prevent cross-origin requests from
   // local dev servers hitting the live API.
+  // allowHeaders is a static list (not the default empty/reflect) so a
+  // preflight cannot feed Access-Control-Request-Headers into hono's header
+  // parser (CVE-2026-69207 ReDoS in hono < 4.12.34). Frontend GETs send no
+  // custom headers; Content-Type is the only one a JSON body would need.
   app.use('*', cors({
     origin: process.env.NODE_ENV === 'production'
       ? ['https://mase.fi']
       : ['https://mase.fi', 'http://localhost:5173'],
+    allowHeaders: ['Content-Type'],
   }));
 
   app.onError((err, c) => {
