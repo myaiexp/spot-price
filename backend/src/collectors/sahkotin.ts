@@ -49,10 +49,22 @@ interface SahkotinSlot {
   value: number;  // EUR/MWh, no tax
 }
 
+/**
+ * Runtime type guard for sahkotin.fi slots. `date` is the `prices` primary key,
+ * so it must be a non-empty string that parses to a real instant — an empty or
+ * unparseable date would make Postgres reject the whole chunk insert. `value`
+ * must be a finite number so NaN/Infinity cannot reach NUMERIC columns.
+ */
 function isSahkotinSlot(slot: unknown): slot is SahkotinSlot {
   if (typeof slot !== 'object' || slot === null) return false;
   const s = slot as Record<string, unknown>;
-  return typeof s.date === 'string' && typeof s.value === 'number' && Number.isFinite(s.value);
+  return (
+    typeof s.date === 'string' &&
+    s.date.length > 0 &&
+    !Number.isNaN(new Date(s.date).getTime()) &&
+    typeof s.value === 'number' &&
+    Number.isFinite(s.value)
+  );
 }
 
 export async function fetchSahkotinPrices(start: string, end: string): Promise<SahkotinSlot[]> {
@@ -70,7 +82,23 @@ export async function fetchSahkotinPrices(start: string, end: string): Promise<S
   if (typeof raw !== 'object' || raw === null) return [];
   const data = raw as Record<string, unknown>;
   if (!Array.isArray(data.prices)) return [];
-  return (data.prices as unknown[]).filter(isSahkotinSlot);
+
+  const prices = data.prices as unknown[];
+  const valid = prices.filter(isSahkotinSlot);
+  const skipped = prices.length - valid.length;
+  if (skipped > 0) {
+    console.warn(`Skipped ${skipped} slot(s) with invalid fields from sahkotin.fi`);
+  }
+  // A non-empty prices array that filters to nothing is malformed upstream
+  // data, not end of history. Returning [] here would make backfillPrices
+  // stop the walk and silently truncate everything older than this chunk.
+  if (prices.length > 0 && valid.length === 0) {
+    throw new Error(
+      `sahkotin.fi returned ${prices.length} price slot(s) but no valid slots — ` +
+        `aborting rather than treating this as end of history`,
+    );
+  }
+  return valid;
 }
 
 /**

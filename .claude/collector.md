@@ -19,6 +19,8 @@ Timer fires `dist/collector.js` with no flags. Upserts today's (and already-publ
 
 sahkotin.fi API, hourly data from Dec 2012, EUR/MWh → EUR/kWh × 1.255 VAT.
 
+Malformed slots (empty/unparseable `date`, non-finite `value`) are dropped and the skip count is logged, matching live collect. A non-empty `prices` array that filters to nothing throws — it is not end-of-history (`prices: []`), which would truncate the rest of the walk. Live collect (spot-hinta) skips the same class of DateTime garbage so one bad slot cannot poison the upsert.
+
 ```
 npm run backfill                          # full history
 npm run collect -- --backfill=2024-01-01  # resume
