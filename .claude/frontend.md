@@ -11,9 +11,9 @@ Pure math is side-effect-free and DOM-free. Render modules own the DOM. `main.js
 | File | Role |
 | --- | --- |
 | `js/calc.js` | Window sums, cheapest/next/peak blocks, EMA, wall-clock ghost alignment |
-| `js/estimator-calc.js` | Deadline parse + resolution, slot assembly, optimal-window search, forward-slot filtering |
-| `js/slot-time.js` | Helsinki wall-clock + datetime→slot indexing |
-| `js/format.js` | Numeric cent conversion vs. cent *strings* |
+| `js/estimator-calc.js` | Deadline minutes parse + resolution, slot assembly, optimal-window search, forward-slot filtering |
+| `js/slot-time.js` | Helsinki wall-clock + datetime→slot indexing (`toDate` coercion) |
+| `js/format.js` | Cents + Helsinki labels: `formatTime` is fi-FI prose (`14.30`); colon `slotLabel`/`hourLabel`/`slotBoundaryLabel`/`slotSpanLabel` for axes and window spans |
 | `js/hero-calc.js` | Cheap-rank → band/tint/copy |
 | `js/insights-calc.js` | Now-index per tab + the three card texts |
 | `js/tab-state.js` | Huomenna enable/fallback to Tänään when tomorrow data is gone |
@@ -37,6 +37,10 @@ Pure math is side-effect-free and DOM-free. Render modules own the DOM. `main.js
 ## Slot indices
 
 All slot indices and labels derive from each slot's `datetime` — never fixed `h*4` arithmetic — so 23h/25h DST days stay aligned. EMA (α=0.3) for hourly aggregation is bucketed the same way: a 23h day yields 23 buckets, a 25h day 25.
+
+Window-span labels go through `slotSpanLabel` (colon form). `formatTime` is the fi-FI prose form (`14.30`) for copy like the hero's "klo" note — don't mix the two; estimator and insight cards share the colon helper so they cannot drift.
+
+Estimator deadlines are minutes-since-Helsinki-midnight (`parseDeadlineMinutes` on the `<input type="time">` value), matching `helsinkiMinutesOfDay` — not a fractional hour.
 
 ## Fetch abort / supersede
 

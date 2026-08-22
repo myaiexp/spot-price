@@ -4,7 +4,7 @@ Two invariants that look swappable and aren't. Both have painted the wrong thing
 
 ## Exclusive window bounds
 
-Window bounds are exclusive everywhere and say so in the name. `windowSums`'s third argument, and the `endExclusive` field on every window from `findCheapestBlock` / `findPeakBlock` / `findNextCheapWindow` / `findOptimalWindow`, is one past the last included slot. That feeds `slotBoundaryMs` / `slotBoundaryLabel` directly with no `+1` at the call site.
+Window bounds are exclusive everywhere and say so in the name. `windowSums`'s third argument, and the `endExclusive` field on every window from `findCheapestBlock` / `findPeakBlock` / `findNextCheapWindow` / `findOptimalWindow`, is one past the last included slot. That feeds `slotBoundaryMs` / `slotBoundaryLabel` / `slotSpanLabel` directly with no `+1` at the call site.
 
 Peak runs stay `{startIndex, endExclusive}` through collect/merge/pick too — gap is `next.startIndex - prev.endExclusive`, length is `endExclusive - startIndex`.
 

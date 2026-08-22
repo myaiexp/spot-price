@@ -21,7 +21,8 @@ const HELSINKI_YMD = new Intl.DateTimeFormat('en-CA', {
   day: '2-digit',
 });
 
-function toDate(input) {
+// Coerce ISO string / epoch ms / Date to a Date (passthrough if already one).
+export function toDate(input) {
   return input instanceof Date ? input : new Date(input);
 }
 

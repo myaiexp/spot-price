@@ -5,6 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   SLOT_MS,
+  toDate,
   helsinkiHourMinute,
   helsinkiMinutesOfDay,
   helsinkiDateKey,
@@ -13,6 +14,20 @@ import {
 } from '../../frontend/js/slot-time.js';
 
 const slot = (iso: string) => ({ datetime: iso, priceWithTax: 0, priceNoTax: 0 });
+
+describe('toDate', () => {
+  it('passes a Date through', () => {
+    const d = new Date('2026-07-18T11:30:00.000Z');
+    expect(toDate(d)).toBe(d);
+  });
+  it('wraps an epoch ms number', () => {
+    const ms = Date.parse('2026-07-18T11:30:00.000Z');
+    expect(toDate(ms).getTime()).toBe(ms);
+  });
+  it('parses an ISO string', () => {
+    expect(toDate('2026-07-18T11:30:00.000Z').toISOString()).toBe('2026-07-18T11:30:00.000Z');
+  });
+});
 
 describe('helsinkiHourMinute', () => {
   it('applies the summer EEST (+3) offset', () => {

@@ -9,7 +9,7 @@ import {
   findDeadlineSlotIndex,
   findOptimalWindow,
   isDeadlineDayUnavailable,
-  parseDeadlineHour,
+  parseDeadlineMinutes,
   collectEstimatorSlots,
 } from '../../frontend/js/estimator-calc.js';
 
@@ -34,6 +34,31 @@ describe('futureSlots', () => {
   });
 });
 
+describe('parseDeadlineMinutes', () => {
+  it('returns null for an empty value', () => {
+    expect(parseDeadlineMinutes('')).toBeNull();
+    expect(parseDeadlineMinutes(null)).toBeNull();
+    expect(parseDeadlineMinutes(undefined)).toBeNull();
+  });
+  it('parses HH:MM as integer minutes since midnight', () => {
+    expect(parseDeadlineMinutes('07:00')).toBe(420);
+    expect(parseDeadlineMinutes('07:30')).toBe(450);
+    expect(parseDeadlineMinutes('00:00')).toBe(0);
+    expect(parseDeadlineMinutes('23:59')).toBe(23 * 60 + 59);
+  });
+  it('keeps a non-quarter-hour time as integer minutes (no float round-trip)', () => {
+    // 07:20 used to be 7 + 20/60 = 7.333… then * 60 = 439.999…; minutes stay 440.
+    expect(parseDeadlineMinutes('07:20')).toBe(440);
+  });
+  it('returns null when minutes are missing (no || 0 fallback)', () => {
+    expect(parseDeadlineMinutes('07')).toBeNull();
+  });
+  it('returns null for a non-numeric hour', () => {
+    expect(parseDeadlineMinutes('abc:30')).toBeNull();
+    expect(parseDeadlineMinutes('not-a-time')).toBeNull();
+  });
+});
+
 describe('findDeadlineSlotIndex', () => {
   // hourly slots across two Helsinki days (48 slots)
   const twoDays = [
@@ -42,19 +67,19 @@ describe('findDeadlineSlotIndex', () => {
   ];
 
   it('resolves a later-today deadline to today', () => {
-    expect(findDeadlineSlotIndex(twoDays, 7)).toBe(7); // 07:00 today
+    expect(findDeadlineSlotIndex(twoDays, 7 * 60)).toBe(7); // 07:00 today
   });
   it('rolls a deadline at/before the first slot to the next day', () => {
     const evening = twoDays.slice(22); // starts 22:00 today
     // 07:00 is before 22:00 → tomorrow. Array: [22,23, then day2 0..23] → idx 2+7.
-    expect(findDeadlineSlotIndex(evening, 7)).toBe(9);
+    expect(findDeadlineSlotIndex(evening, 7 * 60)).toBe(9);
   });
-  it('handles fractional (HH:MM) deadlines', () => {
-    expect(findDeadlineSlotIndex(twoDays, 7.5)).toBe(8); // 07:30 → first slot ≥ = 08:00
+  it('handles HH:MM deadlines as minutes since midnight', () => {
+    expect(findDeadlineSlotIndex(twoDays, 7 * 60 + 30)).toBe(8); // 07:30 → first slot ≥ = 08:00
   });
   it('returns null when the deadline lands past the last slot', () => {
     const short = [eest(18, 22, 0), eest(18, 23, 0), eest(19, 0, 0), eest(19, 5, 0)];
-    expect(findDeadlineSlotIndex(short, 7)).toBeNull(); // rolls to tomorrow, none ≥ 07:00
+    expect(findDeadlineSlotIndex(short, 7 * 60)).toBeNull(); // rolls to tomorrow, none ≥ 07:00
   });
 });
 
@@ -67,45 +92,22 @@ describe('isDeadlineDayUnavailable', () => {
   ];
 
   it('is true when a rolled next-day deadline has no matching slots', () => {
-    expect(isDeadlineDayUnavailable(todayOnlyEvening, 7)).toBe(true);
+    expect(isDeadlineDayUnavailable(todayOnlyEvening, 7 * 60)).toBe(true);
   });
 
   it('is false when tomorrow covers the rolled deadline', () => {
     const evening = twoDays.slice(22); // 22:00 today onward through tomorrow
-    expect(isDeadlineDayUnavailable(evening, 7)).toBe(false);
+    expect(isDeadlineDayUnavailable(evening, 7 * 60)).toBe(false);
   });
 
   it('is false for a same-day deadline even if past available data', () => {
     // Deadline 23:00 is still "today" relative to 20:00 start; missing coverage
     // is a different miss — not the "tomorrow unpublished" case.
-    expect(isDeadlineDayUnavailable(todayOnlyEvening.slice(0, 2), 23)).toBe(false);
+    expect(isDeadlineDayUnavailable(todayOnlyEvening.slice(0, 2), 23 * 60)).toBe(false);
   });
 
   it('is false with no deadline', () => {
     expect(isDeadlineDayUnavailable(todayOnlyEvening, null)).toBe(false);
-  });
-});
-
-describe('parseDeadlineHour', () => {
-  it('returns null for empty or missing input', () => {
-    expect(parseDeadlineHour('')).toBeNull();
-    expect(parseDeadlineHour(null)).toBeNull();
-    expect(parseDeadlineHour(undefined)).toBeNull();
-  });
-
-  it('parses HH:MM into a fractional hour', () => {
-    expect(parseDeadlineHour('07:30')).toBe(7.5);
-    expect(parseDeadlineHour('07:00')).toBe(7);
-    expect(parseDeadlineHour('00:15')).toBe(0.25);
-  });
-
-  it('parses a bare hour with no minutes', () => {
-    expect(parseDeadlineHour('07')).toBe(7);
-  });
-
-  it('returns null for a non-numeric hour', () => {
-    expect(parseDeadlineHour('abc:30')).toBeNull();
-    expect(parseDeadlineHour('not-a-time')).toBeNull();
   });
 });
 
@@ -151,7 +153,7 @@ describe('findOptimalWindow', () => {
   it('constrains the search to before the deadline', () => {
     const slots = quarterSlots([1, 1, 1, 1, 5, 5, 5, 5, 9, 9, 9, 9]);
     // deadline 01:00 → endExclusive = slot index 4, only one 1h window fits ([0,4)).
-    const r = findOptimalWindow(slots, 1, 1, 1)!;
+    const r = findOptimalWindow(slots, 1, 1, 60)!;
     expect(r.best).toMatchObject({ startIndex: 0, endExclusive: 4 });
     expect(r.worst).toMatchObject({ startIndex: 0, endExclusive: 4 });
   });

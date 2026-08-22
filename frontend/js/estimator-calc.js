@@ -10,15 +10,16 @@ export function futureSlots(slots, nowMs, slotDurationMs = SLOT_MS) {
   return slots.filter((s) => Date.parse(s.datetime) + slotDurationMs > nowMs);
 }
 
-// "07:30" → 7.5, "07" → 7. Empty / non-numeric input is null so findOptimalWindow
-// treats it as "no deadline" rather than NaN (which would skip every slot).
-export function parseDeadlineHour(str) {
-  if (str == null || str === '') return null;
-  const parts = String(str).split(':');
+// Parse an <input type="time"> value (HH:MM, or empty) to minutes since Helsinki
+// midnight. Empty / missing minutes / non-numeric → null. Integer minutes, not a
+// fractional hour: 07:20 is 440, not 7 + 20/60 which * 60 becomes 439.999….
+export function parseDeadlineMinutes(value) {
+  if (!value) return null;
+  const parts = value.split(':');
   const hours = parseInt(parts[0], 10);
-  if (!Number.isFinite(hours)) return null;
-  const minutes = parts.length > 1 ? parseInt(parts[1], 10) : 0;
-  return hours + (Number.isFinite(minutes) ? minutes : 0) / 60;
+  const minutes = parseInt(parts[1], 10);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+  return hours * 60 + minutes;
 }
 
 // Today + tomorrow slots, minus any whose window has already ended. The only
@@ -33,15 +34,14 @@ export function collectEstimatorSlots(today, tomorrow, nowMs) {
   return futureSlots(slots, nowMs);
 }
 
-// Index of the first slot at/after a wall-clock deadline hour (fractional for
-// HH:MM), as the charging window's exclusive upper bound. The deadline is the
+// Index of the first slot at/after a wall-clock deadline (minutes since Helsinki
+// midnight), as the charging window's exclusive upper bound. The deadline is the
 // *next* occurrence of that time of day: one already at/before slots[0]'s
 // time-of-day rolls to the following Helsinki day. Assumes slots span at most two
 // Helsinki days (today + tomorrow), which collectEstimatorSlots guarantees. Returns
 // null when the deadline lands past the last slot.
-export function findDeadlineSlotIndex(slots, deadlineHour) {
+export function findDeadlineSlotIndex(slots, deadlineMin) {
   if (!slots || slots.length === 0) return null;
-  const deadlineMin = deadlineHour * 60;
   const firstMin = helsinkiMinutesOfDay(slots[0].datetime);
   const firstDay = helsinkiDateKey(slots[0].datetime);
   const rollsToNextDay = deadlineMin <= firstMin;
@@ -58,27 +58,26 @@ export function findDeadlineSlotIndex(slots, deadlineHour) {
 // day has no matching slot — the usual case is "deadline is tomorrow morning,
 // but tomorrow's prices aren't published yet." Same-day deadlines that simply
 // fall past the last slot return false (that's a different miss).
-export function isDeadlineDayUnavailable(slots, deadlineHour) {
-  if (deadlineHour === null || deadlineHour === undefined) return false;
+export function isDeadlineDayUnavailable(slots, deadlineMin) {
+  if (deadlineMin === null || deadlineMin === undefined) return false;
   if (!slots || slots.length === 0) return false;
-  const deadlineMin = deadlineHour * 60;
   const firstMin = helsinkiMinutesOfDay(slots[0].datetime);
   if (deadlineMin > firstMin) return false; // still on the first slot's day
-  return findDeadlineSlotIndex(slots, deadlineHour) === null;
+  return findDeadlineSlotIndex(slots, deadlineMin) === null;
 }
 
 // Cheapest and most expensive contiguous windows of `durationHours` within the
 // deadline (if any). endExclusive is the exclusive window-end slot index (start +
 // window length), the same bound convention calc.js uses — the view resolves it
-// through slotBoundaryMs, so a window abutting the data end still shows its true
+// through slotSpanLabel, so a window abutting the data end still shows its true
 // end instant.
-export function findOptimalWindow(slots, durationHours, powerKw, deadlineHour) {
+export function findOptimalWindow(slots, durationHours, powerKw, deadlineMin) {
   const slotCount = Math.ceil(durationHours * 4);
   if (!slots || slots.length < slotCount) return null;
 
   let endExclusive = slots.length;
-  if (deadlineHour !== null && deadlineHour !== undefined) {
-    const deadlineIdx = findDeadlineSlotIndex(slots, deadlineHour);
+  if (deadlineMin !== null && deadlineMin !== undefined) {
+    const deadlineIdx = findDeadlineSlotIndex(slots, deadlineMin);
     if (deadlineIdx === null) return null;
     endExclusive = deadlineIdx;
   }

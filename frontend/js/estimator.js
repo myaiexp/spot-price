@@ -2,13 +2,12 @@
 // inputs → cheapest / most expensive charging window and the saving between them.
 import { state } from './state.js';
 import {
-  parseDeadlineHour,
   collectEstimatorSlots,
   findOptimalWindow,
   isDeadlineDayUnavailable,
+  parseDeadlineMinutes,
 } from './estimator-calc.js';
-import { formatTime } from './format.js';
-import { slotBoundaryMs } from './slot-time.js';
+import { slotSpanLabel } from './format.js';
 
 const DEVICES = [
   { name: 'Kiuas', icon: '🔥', power: 6, duration: 2 },
@@ -62,10 +61,10 @@ function getEstimatorSlots() {
 }
 
 // Format a window {startIndex, endExclusive, cost} against the slots array.
-// slotBoundaryMs resolves the exclusive end unclamped, so a window abutting the
-// data end shows its true end time (not 15 min early).
+// slotSpanLabel uses the same colon-form exclusive-end helper as the insight
+// cards, so the two spans on this page cannot drift in separator or bound.
 function windowLabel(slots, win) {
-  return `${formatTime(slots[win.startIndex].datetime)}–${formatTime(slotBoundaryMs(slots, win.endExclusive))}`;
+  return slotSpanLabel(slots, win.startIndex, win.endExclusive);
 }
 
 export function updateEstimator() {
@@ -85,13 +84,13 @@ export function updateEstimator() {
     return;
   }
 
-  const deadlineHour = parseDeadlineHour(deadlineStr);
+  const deadlineMin = parseDeadlineMinutes(deadlineStr);
 
-  const result = findOptimalWindow(slots, duration, power, deadlineHour);
+  const result = findOptimalWindow(slots, duration, power, deadlineMin);
   if (!result) {
     // Deadline rolled to a day we have no slots for (usually tomorrow not yet
     // published) — say so instead of the generic "no windows" miss.
-    const msg = isDeadlineDayUnavailable(slots, deadlineHour)
+    const msg = isDeadlineDayUnavailable(slots, deadlineMin)
       ? 'Huomisen hintoja ei vielä saatavilla'
       : 'Ei sopivia aikaikkunoita löytynyt';
     container.innerHTML = `<div class="estimator-no-data">${msg}</div>`;

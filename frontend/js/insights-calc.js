@@ -1,7 +1,7 @@
 // Pure insight-card state: now-index resolution and the three card texts.
 
 import { findCheapestBlock, findNextCheapWindow, findPeakBlock } from './calc.js';
-import { formatCents, slotBoundaryLabel } from './format.js';
+import { formatCents, slotBoundaryLabel, slotSpanLabel } from './format.js';
 import { findSlotContaining, slotBoundaryMs, SLOT_MS } from './slot-time.js';
 
 // Shown when a card has nothing to say (no data / no window).
@@ -54,11 +54,11 @@ function nextCard(slots, currentIdx) {
 }
 
 // A block card (cheapest / peak): time span + average price. The block's end is
-// already exclusive, so it feeds slotBoundaryLabel as-is — no +1.
+// already exclusive, so it feeds slotSpanLabel as-is — no +1.
 function blockCard(slots, block) {
   if (!block) return EMPTY_CARD;
   return {
-    value: `${slotBoundaryLabel(slots, block.startIndex)}–${slotBoundaryLabel(slots, block.endExclusive)}`,
+    value: slotSpanLabel(slots, block.startIndex, block.endExclusive),
     detail: `Keskihinta ${formatCents(block.avgPrice)} c/kWh`,
   };
 }
