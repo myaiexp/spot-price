@@ -6,7 +6,7 @@ This file is a **map**, not a manual. Standing architecture lives in `.claude/`.
 
 ## Key Patterns
 
-- **Backend**: Hono `createApp(db)` factory, `routes/` over a `queries/` layer (`day.ts`, `now.ts`, `heatmap.ts`), Drizzle ORM. Diet-app pattern.
+- **Backend**: Hono `createApp(db)` factory, `routes/` over a `queries/` layer (`day.ts`, `now.ts`, `heatmap.ts`), Drizzle ORM. Diet-app pattern — [`.claude/backend.md`](.claude/backend.md)
 - **Frontend**: no-build ES-module app (pure calc vs. render modules, including `state.js` / `ui.js` / `load.js`; DST slot indexing; abort/supersede, last-known-good) — [`.claude/frontend.md`](.claude/frontend.md)
 - **Window bounds & cheap-rank polarity**: exclusive `endExclusive` everywhere; `GET /now` `cheaperThanPercent` is high=cheap — [`.claude/windows.md`](.claude/windows.md)
 - **Collection**: systemd timer → `dist/collector.js`; sahkotin historical backfill — [`.claude/collector.md`](.claude/collector.md)

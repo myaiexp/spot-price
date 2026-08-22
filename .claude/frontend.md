@@ -18,7 +18,6 @@ Pure math is side-effect-free and DOM-free. Render modules own the DOM. `main.js
 | `js/insights-calc.js` | Now-index per tab + the three card texts |
 | `js/tab-state.js` | Huomenna enable/fallback to Tänään when tomorrow data is gone |
 | `js/heatmap-calc.js` | Green→amber→red price-to-color scale |
-| `js/load.js` | Abort-supersede load orchestration, isolated renders, last-known-good on refresh blip |
 
 **Render / glue**
 
@@ -31,6 +30,7 @@ Pure math is side-effect-free and DOM-free. Render modules own the DOM. `main.js
 | `js/hero.js` | Current-price headline |
 | `js/main.js` | `init()`: wires controls and hands fetch/render into `createLoader` |
 | `js/api.js` | Same-origin `/porssi/api` fetches |
+| `js/load.js` | Abort-supersede load orchestration, isolated renders, last-known-good on refresh blip |
 | `js/state.js` | Shared mutable UI state (`today`/`yesterday`/`tomorrow`/`now`, active tab, heatmap, chart type/resolution, Chart.js instance, `refreshFailed`) |
 | `js/ui.js` | Generic exclusive toggle-group wiring (click moves `.active`, then `onSelect`) |
 

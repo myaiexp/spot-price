@@ -1,6 +1,6 @@
 # Testing
 
-Frontend pure logic is unit-tested by the backend vitest runner: `backend/src/frontend-*.test.ts` import `../../frontend/js/*.js` (kept out of `dist`/`tsc` by the `*.test.ts` exclude in `backend/tsconfig.json`). From `backend/`: `npx vitest run` (full) or `npx vitest run frontend-insights-calc` (substring path filter).
+Frontend JS is unit-tested by the backend vitest runner — both the pure calc modules and glue (`load.js` abort-supersede, `api.js` fetch). `backend/src/frontend-*.test.ts` import `../../frontend/js/*.js` (kept out of `dist`/`tsc` by the `*.test.ts` exclude in `backend/tsconfig.json`). From `backend/`: `npx vitest run` (full) or `npx vitest run frontend-insights-calc` (substring path filter).
 
 ## Coverage
 
