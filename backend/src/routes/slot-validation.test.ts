@@ -1,8 +1,11 @@
 // Route test: GET endpoints must not emit NaN when a NUMERIC column comes back
-// non-numeric or NULL (audit #3125). node-postgres returns NUMERIC as a string;
-// a NULL or malformed value makes parseFloat return NaN, which JSON-serialises to
-// null and silently corrupts the response. toSlot now drops such rows so the
-// response carries only well-formed slots; valid rows pass through unchanged.
+// non-numeric or NULL (audit #3125), nor 500 when a datetime is unparseable
+// (finding #7134). node-postgres returns NUMERIC as a string; a NULL or
+// malformed value makes parseFloat return NaN, which JSON-serialises to null
+// and silently corrupts the response. An unparseable timestamp makes
+// toISOString throw RangeError and would fail the whole /today, /range, or
+// /now request. rowToPriceSlot drops both so the response carries only
+// well-formed slots; valid rows pass through unchanged.
 import { describe, it, expect } from 'vitest';
 import { createApp } from '../app.js';
 import { makeSelectDb } from '../test-support/fake-db.js';
@@ -10,8 +13,9 @@ import type { Slot } from '../test-support/rows.js';
 
 // Raw row as node-postgres yields it: NUMERIC columns are strings, but a NULL or
 // malformed cell can surface as null/garbage — modelled here as `unknown`. This
-// deliberately widens the shared RawRow (string prices) to exercise the guard.
-type MalformedRow = { datetime: string; priceNoTax: unknown; priceWithTax: unknown };
+// deliberately widens the shared RawRow (string prices / ISO datetime) to
+// exercise both guards.
+type MalformedRow = { datetime: unknown; priceNoTax: unknown; priceWithTax: unknown };
 
 async function rangeSlots(rows: MalformedRow[]): Promise<Slot[]> {
   const app = createApp(makeSelectDb(rows));
@@ -58,5 +62,21 @@ describe('toSlot numeric guard (audit #3125)', () => {
       expect(Number.isFinite(s.priceNoTax)).toBe(true);
       expect(Number.isFinite(s.priceWithTax)).toBe(true);
     }
+  });
+
+  it('drops a row whose datetime is not a finite instant rather than 500ing the batch (finding #7134)', async () => {
+    const rows: MalformedRow[] = [
+      good,
+      { datetime: 'not-a-timestamp', priceNoTax: '5', priceWithTax: '6.275' },
+      { datetime: '', priceNoTax: '5', priceWithTax: '6.275' },
+      { datetime: '2026-03-10T09:00:00.000Z', priceNoTax: null, priceWithTax: '6.275' },
+      { datetime: '2026-03-10T11:00:00.000Z', priceNoTax: '7', priceWithTax: '8.785' },
+    ];
+    const slots = await rangeSlots(rows);
+    expect(slots).toHaveLength(2);
+    expect(slots.map((s) => s.datetime)).toEqual([
+      '2026-03-10T08:00:00.000Z',
+      '2026-03-10T11:00:00.000Z',
+    ]);
   });
 });

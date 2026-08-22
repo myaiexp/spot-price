@@ -44,10 +44,15 @@ export function pricesRoutes(db: Db): Hono {
 
   // GET /now — current 15-minute slot, cheap-rank among today, and yesterday's
   // same-time slot. Polled live by the frontend; getNow caches per Helsinki
-  // 15-minute slot (see createNowQuery).
+  // 15-minute slot (see createNowQuery). Null is "no current slot to serve"
+  // (empty today, or now before the first stored slot) — same empty-day 404
+  // pattern as registerDayRoute.
   router.get('/now', async (c) => {
-    const result = await getNow(db);
-    return c.json(result.body, result.status);
+    const body = await getNow(db);
+    if (!body) {
+      return c.json({ error: 'No price data for today' }, 404);
+    }
+    return c.json(body);
   });
 
   // GET /range — slots for a date range, max 90 days

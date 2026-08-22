@@ -48,6 +48,21 @@ describe('GET /now response cache', () => {
     expect(selectCount()).toBe(6);
   });
 
+  it('caches an empty-today miss so 404 polls do not re-query', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-01-15T12:15:00.000Z'));
+    const { db, selectCount } = countingDb([]);
+    const app = createApp(db);
+
+    const first = await app.request('/api/prices/now');
+    expect(first.status).toBe(404);
+    expect(selectCount()).toBe(1); // today only — no yesterday lookup on empty
+
+    const second = await app.request('/api/prices/now');
+    expect(second.status).toBe(404);
+    expect(selectCount()).toBe(1);
+  });
+
   it('does not leak cached data across app instances', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-01-15T12:15:00.000Z'));

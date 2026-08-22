@@ -1,9 +1,10 @@
-// Route test: GET /now degrades to the most recent slot (flagged stale) when
-// collection lags (audit #3). Previously, if `now` sat past the last stored
-// slot's window the handler 404'd with "Current time slot not found", so the UI
-// showed nothing every time collection was late. The handler now returns the
-// last available slot with `stale: true` instead, while a live `now` still
-// returns the active slot with `stale: false`.
+// Route test: GET /now degrades to the most recent *past* slot (flagged stale)
+// when collection lags (audit #3, finding #7133). Past the last stored slot's
+// window the handler used to 404 with "Current time slot not found"; it now
+// returns that last slot with `stale: true`. A miss is not "always last of
+// day": now before the first slot 404s, and an interior gap is stale with the
+// preceding slot. Live `now` still returns the active 15-minute slot with
+// `stale: false`.
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { createApp } from '../app.js';
 // Same rows answer both of /now's day-scoped SELECTs (today + yesterday); the
@@ -64,5 +65,28 @@ describe('GET /now stale fallback (audit #3)', () => {
   it('still 404s when today has no slots at all', async () => {
     const { status } = await nowAt('2026-01-15T12:20:00.000Z', []);
     expect(status).toBe(404);
+  });
+
+  it('now before the first slot -> 404, not last-of-day (finding #7133)', async () => {
+    // 11:00Z = 13:00 Helsinki, an hour before the first stored slot at 12:00Z.
+    // Serving todaySlots[length-1] here would paint 14:30 as "now".
+    const { status, body } = await nowAt('2026-01-15T11:00:00.000Z', TODAY_ROWS);
+    expect(status).toBe(404);
+    expect('slot' in body).toBe(false);
+  });
+
+  it('interior gap marks stale with the most recent past slot, not last-of-day (finding #7133)', async () => {
+    // 12:00Z window is [12:00, 12:15); 12:30Z is the next stored slot. now at
+    // 12:20Z sits in the hole. Backend used to extend the previous window to
+    // the next start (live, not stale) while the frontend's findSlotContaining
+    // uses a fixed 15 min — pin 15-min windows + stale fallback to the past slot.
+    const gappy = [
+      row('2026-01-15T12:00:00.000Z', 3),
+      row('2026-01-15T12:30:00.000Z', 9),
+    ];
+    const { status, body } = await nowAt('2026-01-15T12:20:00.000Z', gappy);
+    expect(status).toBe(200);
+    expect(body.stale).toBe(true);
+    expect(body.slot.datetime).toBe('2026-01-15T12:00:00.000Z');
   });
 });

@@ -10,6 +10,14 @@ Peak runs stay `{startIndex, endExclusive}` through collect/merge/pick too — g
 
 `endIndex` used to mean *inclusive* in `calc.js` and *exclusive* in `estimator-calc.js`. Don't reintroduce a bound whose name doesn't state its side.
 
+## /now slot windows
+
+`GET /now` uses the same exclusive 15-minute window as the frontend's `findSlotContaining`: `[start, start+15min)`, never stretched to the next stored start. A miss is not "always last of day":
+
+- inside a window → that slot, `stale: false`
+- past the last window, or in an interior gap → most recent *past* slot, `stale: true`
+- before the first slot, or today empty → 404 (`null` from the query; the route owns the status)
+
 ## Cheap-rank polarity
 
 `GET /now` reports `cheaperThanPercent` — the share of today's slots that cost **more** than the current one, so **high = cheap**. The hero tints ≥70 green / ≥30 amber / else red and captions "Halvempi kuin X% tänään" straight from it.
