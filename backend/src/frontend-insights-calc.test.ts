@@ -9,17 +9,10 @@
 
 import { describe, it, expect } from 'vitest';
 import { insightCurrentIndex, insightCards } from '../../frontend/js/insights-calc.js';
+import { stepSlots } from './test-support/rows.js';
 
 // 15-min slots stepping from a UTC start. Winter (EET, UTC+2) so wall-clock
 // labels are the UTC time + 2h with no DST edge in play. Prices are EUR/kWh.
-function stepSlots(startUtcIso: string, prices: number[]) {
-  const start = Date.parse(startUtcIso);
-  return prices.map((p, i) => ({
-    datetime: new Date(start + i * 15 * 60 * 1000).toISOString(),
-    priceWithTax: p,
-    priceNoTax: p,
-  }));
-}
 
 // Today: 12 slots, 14:00–17:00 Helsinki. Dear 14:00–15:00 (0.30), cheap
 // 15:00–16:00 (0.10), mid 16:00–17:00 (0.20) — so both the cheapest block and

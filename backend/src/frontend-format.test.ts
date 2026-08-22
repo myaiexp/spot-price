@@ -10,8 +10,7 @@ import {
   slotBoundaryLabel,
   slotSpanLabel,
 } from '../../frontend/js/format.js';
-
-const slot = (iso: string) => ({ datetime: iso, priceWithTax: 0, priceNoTax: 0 });
+import { slot } from './test-support/rows.js';
 
 // 14:30 EEST (UTC+3) — a mid-afternoon instant with a non-zero minute.
 const ISO_1430 = '2026-07-18T11:30:00.000Z';

@@ -12,8 +12,7 @@ import {
   findSlotContaining,
   slotBoundaryMs,
 } from '../../frontend/js/slot-time.js';
-
-const slot = (iso: string) => ({ datetime: iso, priceWithTax: 0, priceNoTax: 0 });
+import { slot } from './test-support/rows.js';
 
 describe('toDate', () => {
   it('passes a Date through', () => {

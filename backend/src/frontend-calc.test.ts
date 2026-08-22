@@ -12,23 +12,15 @@ import {
   emaAggregate,
   alignSecondaryByWallClock,
 } from '../../frontend/js/calc.js';
+import { slot, stepSlots } from './test-support/rows.js';
 
 const fromPrices = (prices: number[]) =>
-  prices.map((p, i) => ({ datetime: `2026-07-18T00:${i}`, priceWithTax: p, priceNoTax: p }));
+  prices.map((p, i) => slot(`2026-07-18T00:${i}`, p));
 
-// 15-min slots stepping from a UTC start — used to build real DST-day arrays.
-function stepSlots(startUtcIso: string, count: number) {
-  const start = Date.parse(startUtcIso);
-  const slots = [];
-  for (let i = 0; i < count; i++) {
-    slots.push({
-      datetime: new Date(start + i * 15 * 60 * 1000).toISOString(),
-      priceWithTax: i,
-      priceNoTax: i,
-    });
-  }
-  return slots;
-}
+// Index-as-price stepping — DST-day arrays key on sequence position, not a
+// specific price series. Test-specific shaping on top of shared stepSlots.
+const indexSlots = (startUtcIso: string, count: number) =>
+  stepSlots(startUtcIso, Array.from({ length: count }, (_, i) => i));
 
 describe('windowSums', () => {
   it('computes per-start sliding-window sums', () => {
@@ -103,7 +95,7 @@ describe('findPeakBlock gap bridging', () => {
 
 describe('emaAggregate DST hour bucketing', () => {
   it('produces 24 hourly buckets on a normal day', () => {
-    const day = stepSlots('2026-07-17T21:00:00Z', 96); // Helsinki 2026-07-18 00:00..
+    const day = indexSlots('2026-07-17T21:00:00Z', 96); // Helsinki 2026-07-18 00:00..
     const hourly = emaAggregate(day);
     expect(hourly).toHaveLength(24);
     // First bucket is the EMA of its 4 quarter-slots (prices 0,1,2,3).
@@ -115,14 +107,14 @@ describe('emaAggregate DST hour bucketing', () => {
   });
 
   it('produces 23 buckets on the spring-forward day (skips hour 3)', () => {
-    const day = stepSlots('2026-03-28T22:00:00Z', 92); // Helsinki 2026-03-29, 23h
+    const day = indexSlots('2026-03-28T22:00:00Z', 92); // Helsinki 2026-03-29, 23h
     const hourly = emaAggregate(day);
     expect(hourly).toHaveLength(23);
     expect(hourly.map((h) => helsinkiHour(h.datetime))).not.toContain(3);
   });
 
   it('produces 25 buckets on the fall-back day (hour 3 twice)', () => {
-    const day = stepSlots('2026-10-24T21:00:00Z', 100); // Helsinki 2026-10-25, 25h
+    const day = indexSlots('2026-10-24T21:00:00Z', 100); // Helsinki 2026-10-25, 25h
     const hourly = emaAggregate(day);
     expect(hourly).toHaveLength(25);
     const threes = hourly.filter((h) => helsinkiHour(h.datetime) === 3);
@@ -132,15 +124,15 @@ describe('emaAggregate DST hour bucketing', () => {
 
 describe('alignSecondaryByWallClock (audit #6332)', () => {
   it('returns [] for empty secondary so the ghost series can be skipped', () => {
-    const primary = stepSlots('2026-07-17T21:00:00Z', 4);
+    const primary = indexSlots('2026-07-17T21:00:00Z', 4);
     expect(alignSecondaryByWallClock(primary, [])).toEqual([]);
     expect(alignSecondaryByWallClock(primary, null as unknown as [])).toEqual([]);
   });
 
   it('matches equal-length normal days by wall-clock (same as zip-by-index)', () => {
     // Helsinki 2026-07-18 vs 2026-07-17, both 96 slots starting at local midnight.
-    const primary = stepSlots('2026-07-17T21:00:00Z', 96);
-    const secondary = stepSlots('2026-07-16T21:00:00Z', 96).map((s, i) => ({
+    const primary = indexSlots('2026-07-17T21:00:00Z', 96);
+    const secondary = indexSlots('2026-07-16T21:00:00Z', 96).map((s, i) => ({
       ...s,
       priceWithTax: 1000 + i,
     }));
@@ -154,8 +146,8 @@ describe('alignSecondaryByWallClock (audit #6332)', () => {
   it('inserts nulls for spring-forward gap hours when primary is a normal day', () => {
     // Primary: normal 96-slot day (has 03:00–03:45). Secondary: spring-forward
     // 92 slots (skips 03:00–03:45). Zip-by-index would shift everything after 03:00.
-    const primary = stepSlots('2026-07-17T21:00:00Z', 96); // 2026-07-18
-    const secondary = stepSlots('2026-03-28T22:00:00Z', 92).map((s, i) => ({
+    const primary = indexSlots('2026-07-17T21:00:00Z', 96); // 2026-07-18
+    const secondary = indexSlots('2026-03-28T22:00:00Z', 92).map((s, i) => ({
       ...s,
       priceWithTax: i + 0.5,
     }));
@@ -177,8 +169,8 @@ describe('alignSecondaryByWallClock (audit #6332)', () => {
   it('drops secondary-only spring-forward mismatch when primary skips hour 3', () => {
     // Primary spring-forward (92); secondary normal (96). Extra secondary 03:xx
     // never appear on the axis; primary length is preserved.
-    const primary = stepSlots('2026-03-28T22:00:00Z', 92);
-    const secondary = stepSlots('2026-07-17T21:00:00Z', 96).map((s, i) => ({
+    const primary = indexSlots('2026-03-28T22:00:00Z', 92);
+    const secondary = indexSlots('2026-07-17T21:00:00Z', 96).map((s, i) => ({
       ...s,
       priceWithTax: i,
     }));
@@ -192,7 +184,7 @@ describe('alignSecondaryByWallClock (audit #6332)', () => {
 
   it('aligns pure-hourly secondary onto a 15-min primary (nulls for non-:00 slots)', () => {
     // Backfill ghost: 24 hourly points vs 96 quarter-hour primary.
-    const primary = stepSlots('2026-07-17T21:00:00Z', 96);
+    const primary = indexSlots('2026-07-17T21:00:00Z', 96);
     const hourlySecondary = [];
     for (let h = 0; h < 24; h++) {
       hourlySecondary.push({
@@ -211,8 +203,8 @@ describe('alignSecondaryByWallClock (audit #6332)', () => {
   });
 
   it('aligns by hour bucket in hourly mode across 23 vs 24 buckets', () => {
-    const primary = emaAggregate(stepSlots('2026-07-17T21:00:00Z', 96)); // 24
-    const secondary = emaAggregate(stepSlots('2026-03-28T22:00:00Z', 92)).map((s, i) => ({
+    const primary = emaAggregate(indexSlots('2026-07-17T21:00:00Z', 96)); // 24
+    const secondary = emaAggregate(indexSlots('2026-03-28T22:00:00Z', 92)).map((s, i) => ({
       ...s,
       priceWithTax: i + 1,
     })); // 23, no hour 3
@@ -231,8 +223,8 @@ describe('alignSecondaryByWallClock (audit #6332)', () => {
   });
 
   it('consumes fall-back duplicate hour-3 buckets in order in hourly mode', () => {
-    const primary = emaAggregate(stepSlots('2026-10-24T21:00:00Z', 100)); // 25, hour 3 ×2
-    const secondary = emaAggregate(stepSlots('2026-10-24T21:00:00Z', 100)).map((s, i) => ({
+    const primary = emaAggregate(indexSlots('2026-10-24T21:00:00Z', 100)); // 25, hour 3 ×2
+    const secondary = emaAggregate(indexSlots('2026-10-24T21:00:00Z', 100)).map((s, i) => ({
       ...s,
       priceWithTax: 100 + i,
     }));
@@ -247,8 +239,8 @@ describe('alignSecondaryByWallClock (audit #6332)', () => {
   });
 
   it('reuses the single secondary hour-3 when primary is fall-back and secondary is normal', () => {
-    const primary = emaAggregate(stepSlots('2026-10-24T21:00:00Z', 100)); // 25
-    const secondary = emaAggregate(stepSlots('2026-07-17T21:00:00Z', 96)).map((s, i) => ({
+    const primary = emaAggregate(indexSlots('2026-10-24T21:00:00Z', 100)); // 25
+    const secondary = emaAggregate(indexSlots('2026-07-17T21:00:00Z', 96)).map((s, i) => ({
       ...s,
       priceWithTax: i,
     })); // 24

@@ -12,17 +12,17 @@ import {
   parseDeadlineMinutes,
   collectEstimatorSlots,
 } from '../../frontend/js/estimator-calc.js';
+import { slot, stepSlots } from './test-support/rows.js';
 
 // Summer (EEST, UTC+3) slot at a Helsinki wall-clock time — deterministic, no DST
-// inside the test window.
+// inside the test window. Test-specific day/hour helper on top of shared `slot`.
 function eest(day: number, hour: number, minute: number, price = 0) {
   const ms = Date.UTC(2026, 6, day, hour, minute) - 3 * 60 * 60 * 1000;
-  return { datetime: new Date(ms).toISOString(), priceWithTax: price, priceNoTax: price };
+  return slot(new Date(ms).toISOString(), price);
 }
 
 // 15-min slots from Helsinki 2026-07-18 00:00 with the given prices.
-const quarterSlots = (prices: number[]) =>
-  prices.map((p, i) => eest(18, Math.floor(i / 4), (i % 4) * 15, p));
+const quarterSlots = (prices: number[]) => stepSlots(eest(18, 0, 0).datetime, prices);
 
 describe('futureSlots', () => {
   it('drops slots whose window has already ended', () => {
@@ -160,5 +160,42 @@ describe('findOptimalWindow', () => {
 
   it('returns null when fewer slots than the requested duration', () => {
     expect(findOptimalWindow(quarterSlots([1, 1]), 1, 1, null)).toBeNull();
+  });
+
+  // Finding #7111: a deadline past the last slot start is not "no windows" —
+  // remaining slots still finish before it, so search through slots.length.
+  it('returns a window for a 00:00 deadline with today-only evening data (finding #7111)', () => {
+    // 20:00–23:45 Helsinki. 00:00 rolls to tomorrow (unpublished); the 1h job
+    // still finishes tonight. Cheap last hour is 23:00–00:00.
+    const tonight = stepSlots('2026-07-17T17:00:00.000Z', [
+      ...Array(12).fill(10), 1, 1, 1, 1,
+    ]);
+    const r = findOptimalWindow(tonight, 1, 1, 0)!;
+    expect(r.best).toMatchObject({ startIndex: 12, endExclusive: 16 });
+  });
+
+  it('returns a window for a 23:59 deadline against a full 15-min day (finding #7111)', () => {
+    // Last start is 23:45; 23:59 has no matching slot, but every slot starts
+    // before the deadline. Cheap last hour is 23:00–00:00.
+    const day = stepSlots('2026-07-17T21:00:00.000Z', [
+      ...Array(92).fill(10), 1, 1, 1, 1,
+    ]);
+    expect(day).toHaveLength(96);
+    const r = findOptimalWindow(day, 1, 1, 23 * 60 + 59)!;
+    expect(r.best).toMatchObject({ startIndex: 92, endExclusive: 96 });
+  });
+
+  it('searches tonight for a rolled 07:00 deadline, and only then falls through (finding #7111)', () => {
+    const tonight = stepSlots('2026-07-17T17:00:00.000Z', [
+      ...Array(12).fill(10), 1, 1, 1, 1,
+    ]);
+    const r = findOptimalWindow(tonight, 1, 1, 7 * 60)!;
+    expect(r.best).toMatchObject({ startIndex: 12, endExclusive: 16 });
+
+    // 5h cannot fit in 4h of evening; search still ran (didn't abort) and the
+    // view can now explain the miss as unpublished tomorrow.
+    const tooLong = stepSlots('2026-07-17T17:00:00.000Z', Array(16).fill(10));
+    expect(findOptimalWindow(tooLong, 5, 1, 7 * 60)).toBeNull();
+    expect(isDeadlineDayUnavailable(tooLong, 7 * 60)).toBe(true);
   });
 });

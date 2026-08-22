@@ -6,7 +6,7 @@
 //
 // Usage: `tsx src/collector.ts`                  live 15-min collect
 //        `tsx src/collector.ts --backfill`        full history backfill
-//        `tsx src/collector.ts --backfill=DATE`   resume walk from an exclusive upper bound
+//        `tsx src/collector.ts --backfill=DATE`   resume from Helsinki midnight of DATE
 import { config } from 'dotenv';
 import { createDb } from './db/connection.js';
 import { collectPrices } from './collectors/spot-hinta.js';

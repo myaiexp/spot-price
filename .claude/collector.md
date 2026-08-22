@@ -26,6 +26,6 @@ npm run backfill                          # full history
 npm run collect -- --backfill=2024-01-01  # resume
 ```
 
-The default exclusive upper bound is Helsinki local midnight of the current Helsinki day — live spot-hinta owns Helsinki today. `--backfill=DATE` maps to `walkBackFrom`, an exclusive upper bound: the walk moves *backwards* from that instant.
+The default exclusive upper bound is Helsinki local midnight of the current Helsinki day — live spot-hinta owns Helsinki today. `--backfill=YYYY-MM-DD` maps to `walkBackFrom` at Helsinki midnight of that day (not UTC midnight — that would be 02:00/03:00 Helsinki and walk into the named day's first hours). A full ISO instant is kept as-is. The walk moves *backwards* from that exclusive upper bound.
 
 Deploy (port, units, `.env`): `CLAUDE.md` Deploy.

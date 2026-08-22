@@ -67,10 +67,12 @@ export function isDeadlineDayUnavailable(slots, deadlineMin) {
 }
 
 // Cheapest and most expensive contiguous windows of `durationHours` within the
-// deadline (if any). endExclusive is the exclusive window-end slot index (start +
-// window length), the same bound convention calc.js uses — the view resolves it
-// through slotSpanLabel, so a window abutting the data end still shows its true
-// end instant.
+// deadline (if any). A deadline with no matching slot (past last start, or
+// rolled onto a day with no data) searches through slots.length — remaining
+// slots still start before it (finding #7111). endExclusive on the result is
+// the exclusive window-end slot index (start + window length), the same bound
+// convention calc.js uses — the view resolves it through slotSpanLabel, so a
+// window abutting the data end still shows its true end instant.
 export function findOptimalWindow(slots, durationHours, powerKw, deadlineMin) {
   const slotCount = Math.ceil(durationHours * 4);
   if (!slots || slots.length < slotCount) return null;
@@ -78,8 +80,11 @@ export function findOptimalWindow(slots, durationHours, powerKw, deadlineMin) {
   let endExclusive = slots.length;
   if (deadlineMin !== null && deadlineMin !== undefined) {
     const deadlineIdx = findDeadlineSlotIndex(slots, deadlineMin);
-    if (deadlineIdx === null) return null;
-    endExclusive = deadlineIdx;
+    // No matching slot (deadline past the last start, or rolled onto a day
+    // with no data) still leaves every remaining slot starting before the
+    // deadline — search them. Duration-too-long then returns null below, and
+    // isDeadlineDayUnavailable explains the unpublished-tomorrow case.
+    endExclusive = deadlineIdx ?? slots.length;
   }
 
   const sums = windowSums(slots, slotCount, endExclusive);
