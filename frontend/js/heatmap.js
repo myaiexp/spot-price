@@ -4,8 +4,6 @@ import { priceToColor } from './heatmap-calc.js';
 
 const DAY_LABELS = ['Ma', 'Ti', 'Ke', 'To', 'Pe', 'La', 'Su'];
 
-export { priceToColor };
-
 // Placeholder text for a *failed* heatmap request — deliberately distinct from
 // the "Ei riittävästi tietoja" empty-data state, so a network error isn't read as
 // "this week has no prices". Without it the card sat on "Ladataan..." forever
