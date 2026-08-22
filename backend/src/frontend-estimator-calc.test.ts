@@ -106,7 +106,7 @@ describe('findOptimalWindow', () => {
 
   it('constrains the search to before the deadline', () => {
     const slots = quarterSlots([1, 1, 1, 1, 5, 5, 5, 5, 9, 9, 9, 9]);
-    // deadline 01:00 → maxEnd = slot index 4, only one 1h window fits ([0,4)).
+    // deadline 01:00 → endExclusive = slot index 4, only one 1h window fits ([0,4)).
     const r = findOptimalWindow(slots, 1, 1, 1)!;
     expect(r.best).toMatchObject({ startIndex: 0, endExclusive: 4 });
     expect(r.worst).toMatchObject({ startIndex: 0, endExclusive: 4 });

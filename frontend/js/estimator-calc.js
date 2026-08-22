@@ -52,28 +52,28 @@ export function isDeadlineDayUnavailable(slots, deadlineHour) {
 // through slotBoundaryMs, so a window abutting the data end still shows its true
 // end instant.
 export function findOptimalWindow(slots, durationHours, powerKw, deadlineHour) {
-  const quarterSlots = Math.ceil(durationHours * 4);
-  if (!slots || slots.length < quarterSlots) return null;
+  const slotCount = Math.ceil(durationHours * 4);
+  if (!slots || slots.length < slotCount) return null;
 
-  let maxEnd = slots.length;
+  let endExclusive = slots.length;
   if (deadlineHour !== null && deadlineHour !== undefined) {
     const deadlineIdx = findDeadlineSlotIndex(slots, deadlineHour);
     if (deadlineIdx === null) return null;
-    maxEnd = deadlineIdx;
+    endExclusive = deadlineIdx;
   }
 
-  const sums = windowSums(slots, quarterSlots, maxEnd);
+  const sums = windowSums(slots, slotCount, endExclusive);
   if (sums.length === 0) return null;
 
-  const factor = powerKw * 0.25; // €/slot-hour: kW × 0.25h per quarter-slot
+  const kwhPerSlot = powerKw * 0.25;
   const minStart = argMin(sums);
   const maxStart = argMax(sums);
-  const bestCost = sums[minStart] * factor;
-  const worstCost = sums[maxStart] * factor;
+  const bestCost = sums[minStart] * kwhPerSlot;
+  const worstCost = sums[maxStart] * kwhPerSlot;
 
   return {
-    best: { startIndex: minStart, endExclusive: minStart + quarterSlots, cost: bestCost },
-    worst: { startIndex: maxStart, endExclusive: maxStart + quarterSlots, cost: worstCost },
+    best: { startIndex: minStart, endExclusive: minStart + slotCount, cost: bestCost },
+    worst: { startIndex: maxStart, endExclusive: maxStart + slotCount, cost: worstCost },
     savings: worstCost - bestCost,
   };
 }

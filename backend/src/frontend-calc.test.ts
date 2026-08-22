@@ -34,7 +34,7 @@ describe('windowSums', () => {
   it('computes per-start sliding-window sums', () => {
     expect(windowSums(fromPrices([1, 2, 3, 4]), 2)).toEqual([3, 5, 7]);
   });
-  it('honours an exclusive maxEnd bound', () => {
+  it('honours an exclusive endExclusive bound', () => {
     expect(windowSums(fromPrices([1, 2, 3, 4]), 2, 3)).toEqual([3, 5]);
   });
   it('returns [] when the window does not fit', () => {
@@ -94,6 +94,10 @@ describe('findPeakBlock gap bridging', () => {
   });
   it('returns null when no merged run reaches the 4-slot (1h) minimum', () => {
     expect(findPeakBlock(fromPrices([100, 100, 100]))).toBeNull();
+  });
+  it('reports endExclusive past the last slot when the peak abuts the data end', () => {
+    const r = findPeakBlock(fromPrices([1, 1, 100, 100, 100, 100]));
+    expect(r).toMatchObject({ startIndex: 2, endExclusive: 6 });
   });
 });
 

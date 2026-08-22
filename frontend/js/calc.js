@@ -27,11 +27,12 @@ export function argMax(arr) {
 }
 
 // Sliding-window sums of priceWithTax: sums[i] = Σ slots[i .. i+windowSize) for
-// every start i in [0, maxEnd-windowSize]. One prefix-sum pass (O(n)) shared by
-// both the cheapest-block and optimal-window scans, so the window bookkeeping
-// lives in exactly one place.
-export function windowSums(slots, windowSize, maxEnd = slots.length) {
-  const end = Math.min(maxEnd, slots.length);
+// every start i in [0, endExclusive-windowSize]. endExclusive is one past the
+// last slot a window may include (same bound as the public window fields). One
+// prefix-sum pass (O(n)) shared by both the cheapest-block and optimal-window
+// scans, so the window bookkeeping lives in exactly one place.
+export function windowSums(slots, windowSize, endExclusive = slots.length) {
+  const end = Math.min(endExclusive, slots.length);
   const count = end - windowSize + 1;
   if (count <= 0) return [];
   const prefix = new Array(end + 1);
@@ -91,9 +92,10 @@ export function findNextCheapWindow(slots, currentIndex) {
 }
 
 // Longest run of above-threshold (60th-percentile) slots, bridging gaps of ≤2
-// below-threshold slots (30 min). Expressed as explicit run objects: collect
-// above-threshold runs, merge neighbours separated by ≤2 slots, keep the longest
-// (≥1h). avgPrice spans the merged run, bridged dips included.
+// below-threshold slots (30 min). Runs are {startIndex, endExclusive} through
+// collect / merge / pick so gap and length math stay on the same exclusive-end
+// convention as every other window in this module (audit #5565, #7122). avgPrice
+// spans the merged run, bridged dips included.
 export function findPeakBlock(slots) {
   if (!slots || slots.length === 0) return null;
   const threshold = priceThreshold(slots, 0.6);
@@ -104,31 +106,32 @@ export function findPeakBlock(slots) {
     const above = slots[i].priceWithTax >= threshold;
     if (above && start === -1) start = i;
     else if (!above && start !== -1) {
-      runs.push([start, i - 1]);
+      runs.push({ startIndex: start, endExclusive: i });
       start = -1;
     }
   }
-  if (start !== -1) runs.push([start, slots.length - 1]);
+  if (start !== -1) runs.push({ startIndex: start, endExclusive: slots.length });
   if (runs.length === 0) return null;
 
-  const merged = [runs[0].slice()];
+  const merged = [{ ...runs[0] }];
   for (let i = 1; i < runs.length; i++) {
     const prev = merged[merged.length - 1];
-    const gap = runs[i][0] - prev[1] - 1;
-    if (gap <= 2) prev[1] = runs[i][1];
-    else merged.push(runs[i].slice());
+    const gap = runs[i].startIndex - prev.endExclusive;
+    if (gap <= 2) prev.endExclusive = runs[i].endExclusive;
+    else merged.push({ ...runs[i] });
   }
 
   let best = null;
   for (const run of merged) {
-    if (!best || run[1] - run[0] > best[1] - best[0]) best = run;
+    const len = run.endExclusive - run.startIndex;
+    if (!best || len > best.endExclusive - best.startIndex) best = run;
   }
-  const bestLen = best[1] - best[0] + 1;
+  const bestLen = best.endExclusive - best.startIndex;
   if (bestLen < 4) return null;
 
   let sum = 0;
-  for (let i = best[0]; i <= best[1]; i++) sum += slots[i].priceWithTax;
-  return { startIndex: best[0], endExclusive: best[1] + 1, avgPrice: sum / bestLen };
+  for (let i = best.startIndex; i < best.endExclusive; i++) sum += slots[i].priceWithTax;
+  return { startIndex: best.startIndex, endExclusive: best.endExclusive, avgPrice: sum / bestLen };
 }
 
 // EMA (α default 0.3) over each wall-clock hour. Buckets are cut at the first
@@ -143,14 +146,14 @@ export function emaAggregate(slots, alpha = 0.3) {
     if (i === 0 || minute === 0) buckets.push([]);
     buckets[buckets.length - 1].push(slots[i]);
   }
-  return buckets.map((quarter) => {
-    let ema = quarter[0].priceWithTax;
-    let emaNoTax = quarter[0].priceNoTax;
-    for (let i = 1; i < quarter.length; i++) {
-      ema = alpha * quarter[i].priceWithTax + (1 - alpha) * ema;
-      emaNoTax = alpha * quarter[i].priceNoTax + (1 - alpha) * emaNoTax;
+  return buckets.map((hourBucket) => {
+    let ema = hourBucket[0].priceWithTax;
+    let emaNoTax = hourBucket[0].priceNoTax;
+    for (let i = 1; i < hourBucket.length; i++) {
+      ema = alpha * hourBucket[i].priceWithTax + (1 - alpha) * ema;
+      emaNoTax = alpha * hourBucket[i].priceNoTax + (1 - alpha) * emaNoTax;
     }
-    return { datetime: quarter[0].datetime, priceNoTax: emaNoTax, priceWithTax: ema };
+    return { datetime: hourBucket[0].datetime, priceNoTax: emaNoTax, priceWithTax: ema };
   });
 }
 

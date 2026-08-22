@@ -18,7 +18,7 @@ const DEVICES = [
   { name: 'Muu', icon: '⚙', power: null, duration: null },
 ];
 
-let selectedDevice = -1;
+let selectedDeviceIndex = -1;
 let estimatorDebounceTimer = null;
 
 function initDeviceChips() {
@@ -29,12 +29,12 @@ function initDeviceChips() {
     chip.textContent = `${device.icon} ${device.name}`;
     chip.addEventListener('click', () => {
       // Toggle selection
-      if (selectedDevice === idx) {
-        selectedDevice = -1;
+      if (selectedDeviceIndex === idx) {
+        selectedDeviceIndex = -1;
         chip.classList.remove('active');
       } else {
         container.querySelectorAll('.device-chip').forEach((c) => c.classList.remove('active'));
-        selectedDevice = idx;
+        selectedDeviceIndex = idx;
         chip.classList.add('active');
 
         // Auto-populate inputs
