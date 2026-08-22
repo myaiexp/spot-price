@@ -4,8 +4,9 @@
 // malformed value makes parseFloat return NaN, which JSON-serialises to null
 // and silently corrupts the response. An unparseable timestamp makes
 // toISOString throw RangeError and would fail the whole /today, /range, or
-// /now request. rowToPriceSlot drops both so the response carries only
-// well-formed slots; valid rows pass through unchanged.
+// /now request. rowToPriceSlot returns null for either; mapSlots drops those
+// so the response carries only well-formed slots; valid rows pass through
+// unchanged.
 import { describe, it, expect } from 'vitest';
 import { createApp } from '../app.js';
 import { makeSelectDb } from '../test-support/fake-db.js';
@@ -25,7 +26,7 @@ async function rangeSlots(rows: MalformedRow[]): Promise<Slot[]> {
   return body.slots;
 }
 
-describe('toSlot numeric guard (audit #3125)', () => {
+describe('rowToPriceSlot/mapSlots numeric guard (audit #3125)', () => {
   const good: MalformedRow = { datetime: '2026-03-10T08:00:00.000Z', priceNoTax: '5', priceWithTax: '6.275' };
 
   it('passes well-formed rows through unchanged', async () => {

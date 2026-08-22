@@ -1,5 +1,5 @@
 // Tests collectPrices' non-array upstream guard (audit #3968). spot-hinta.fi is
-// expected to return a JSON array of slots; the guard `!Array.isArray(slots)`
+// expected to return a JSON array of slots; the guard `!Array.isArray(raw)`
 // defends against an upstream that returns something else entirely — an error
 // envelope object, null, or a bare scalar — by treating it as "nothing to do"
 // (upserted: 0) instead of crashing on `.filter`/`.length`. The existing
