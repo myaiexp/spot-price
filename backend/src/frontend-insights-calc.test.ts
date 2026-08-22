@@ -69,6 +69,26 @@ describe('insightCards', () => {
     expect(cards.peak).toEqual({ value: '14:00–15:00', detail: 'Keskihinta 30.00 c/kWh' });
   });
 
+  it('counts down in minutes when the next cheap window is under an hour away', () => {
+    // currentIdx 2 is still in the 0.30 run; next cheap is index 4 (15:00) =
+    // 2 slots = 30 min. The existing today-view case only hits the exact-1h
+    // branch (`${h}h`); this is the `${n} min` branch (audit #7137).
+    const cards = insightCards(TODAY, 2);
+    expect(cards.next).toEqual({ value: '30 min', detail: 'Alkaa 15:00 (10.00 c/kWh)' });
+  });
+
+  it('counts down as hours and leftover minutes when both are set', () => {
+    // Five expensive slots, then cheap — so from index 0 the next cheap is
+    // index 5: 5 × 15 min = 75 min → `1h 15min`. TODAY's cheap run starts at
+    // index 4 (exactly 60 min from 0), so this fixture is what reaches the
+    // mixed `${h}h ${m}min` branch (audit #7137).
+    const later = stepSlots('2026-01-15T12:00:00.000Z', [
+      0.3, 0.3, 0.3, 0.3, 0.3, 0.1, 0.1, 0.1, 0.2, 0.2, 0.2, 0.2,
+    ]);
+    const cards = insightCards(later, 0);
+    expect(cards.next).toEqual({ value: '1h 15min', detail: 'Alkaa 15:15 (10.00 c/kWh)' });
+  });
+
   it('reports being inside a cheap window right now', () => {
     const cards = insightCards(TODAY, 4);
     // At-or-under-threshold slots run to the end of the array, so the window

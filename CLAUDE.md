@@ -2,26 +2,23 @@
 
 > Finnish electricity spot price tracker with historical data and comparison views.
 
+This file is a **map**, not a manual. Standing architecture lives in `.claude/`. `docs/plans/` are frozen historical snapshots — they still describe a single-file frontend, port 3500, and a tsx-run collector, all contradicted by current code.
+
 ## Key Patterns
 
-- Backend follows the diet-app Hono pattern: `createApp(db)` factory, route modules, Drizzle ORM
-- Frontend uses mase.fi's design system: near-black backgrounds, golden-amber accent, Bricolage Grotesque + DM Sans fonts
-- Frontend is a no-build ES-module app: `frontend/index.html` (markup) + `frontend/styles.css` + `frontend/js/*.js` loaded via `<script type="module">` (Chart.js from CDN). Pure math lives in side-effect-free, DOM-free modules — `js/calc.js` (window sums, cheapest/next/peak blocks, EMA, wall-clock ghost alignment), `js/estimator-calc.js` (deadline resolution, optimal-window search, forward-slot filtering), `js/slot-time.js` (Helsinki wall-clock + datetime→slot indexing), `js/format.js`, `js/hero-calc.js` (cheap-rank → band/tint/copy), `js/insights-calc.js` (now-index per tab + the three card texts) — kept apart from the render modules (`js/chart.js`, `js/insights.js`, `js/heatmap.js`, `js/estimator.js`, `js/hero.js`) and the `js/main.js` orchestrator. All slot indices/labels derive from each slot's `datetime` (never fixed `h*4` arithmetic) so 23h/25h DST days stay aligned.
-- Frontend pure logic is unit-tested by the backend vitest runner: `backend/src/frontend-*.test.ts` import `../../frontend/js/*.js` (kept out of `dist`/`tsc` by the `*.test.ts` exclude). Covers DST 92/100-slot days, deadline next-day rollover, past-window filtering, the unclamped window-end boundary, the hero's cheap-rank bands, the insight cards' per-tab now-index, and chart ghost-series wall-clock alignment (not index zip). `frontend-api.test.ts` covers the fetch layer (abort signal on every request, 404 → null, tomorrow degrading to null) against the shared fetch stubs. `routes/now-cheaper-than.test.ts` also imports `js/hero-calc.js` so the API value and the tint that reads it are asserted together.
-- Window bounds are exclusive everywhere and say so in the name: `windowSums`'s third argument, and the `endExclusive` field on every window from `findCheapestBlock` / `findPeakBlock` / `findNextCheapWindow` / `findOptimalWindow`, is one past the last included slot. That feeds `slotBoundaryMs` / `slotBoundaryLabel` directly with no `+1` at the call site. Peak runs stay `{startIndex, endExclusive}` through collect/merge/pick too — gap is `next.startIndex - prev.endExclusive`, length is `endExclusive - startIndex`. `endIndex` used to mean *inclusive* in calc.js and *exclusive* in estimator-calc.js; don't reintroduce a bound whose name doesn't state its side.
-- Browser API calls are bounded and cancellable: `js/api.js` puts `AbortSignal.timeout(FETCH_TIMEOUT_MS)` (15 s, mirroring the collector) on every request, and `main.js` holds one `AbortController` per load so the quarter-hour refresh cancels a still-running previous load instead of stacking. A rejection whose own controller was aborted is a supersede, not a failure — it must not paint an error over the newer load. Heatmap failures call `showHeatmapError()` rather than being swallowed (its placeholder text is distinct from the empty-data "Ei riittävästi tietoja").
-- `GET /now` reports `cheaperThanPercent` — the share of today's slots that cost **more** than the current one, so **high = cheap**. The hero tints ≥70 green / ≥30 amber / else red and captions "Halvempi kuin X% tänään" straight from it. It was once a bottom-up `percentile` (share *cheaper* than now), which the hero read as a cheap signal and painted peak prices green; keep both ends of the wire on this polarity.
-- Data collection: systemd timer runs `dist/collector.js` every 15 min, upserts spot-hinta.fi data. `src/collector.ts` is a thin CLI entry only — the collect/backfill logic lives in side-effect-free library modules (`src/collectors/spot-hinta.ts` live, `src/collectors/sahkotin.ts` backfill, `src/collectors/upsert.ts` shared upsert), conversion + HTTP helpers in `src/utils/`
-- Historical backfill: sahkotin.fi API, hourly data from Dec 2012, run via `npm run backfill`; default exclusive upper bound is Helsinki local midnight of the current Helsinki day (live spot-hinta owns Helsinki today). Resume with `npm run collect -- --backfill=2024-01-01` (maps to `walkBackFrom`, an exclusive upper bound — walk moves backwards from that instant)
-- API sources: spot-hinta.fi (live 15-min), sahkotin.fi (historical hourly backfill, EUR/MWh → EUR/kWh × 1.255 VAT)
-- EMA (α=0.3) for hourly chart aggregation, bucketed by each slot's Helsinki wall-clock hour (DST-correct: a 23h day yields 23 buckets, a 25h day 25 — not a fixed 4-slot slice)
-- Heatmap shows current week's actual hourly prices (SQL-aggregated), greyed cells for missing data
-- Dependency hygiene: `backend/package.json` `overrides` aliases the deprecated `@esbuild-kit/esm-loader` + `@esbuild-kit/core-utils` (declared by drizzle-kit but never imported — it uses tsx) to `get-tsconfig`, a tiny zero-esbuild package already in the tree. This drops the deprecated packages and a stale `esbuild@0.18.20` copy from the lock file. Don't remove the override — it reintroduces the deprecated chain.
-- Test doubles are shared, not re-rolled: `backend/src/test-support/` holds the fake-Db builders (`makeSelectDb`/`makeCountingSelectDb`, `makeInsertDb`/`makeCountingInsertDb`/`makeCapturingInsertDb`), fetch stubs (`okJson`/`failedResponse`/`stubFetch`/`stubFailedFetch`), and row fixtures (`RawRow`/`Slot` types, `row()`/`taxedRow()` factories). New route/collector tests import from there rather than hand-casting `as unknown as Db`. The module is test-only — tsconfig `exclude`s `src/test-support/**` so it stays out of `dist/` and the `tsc --noEmit` graph (like `*.test.ts`); it's verified by vitest at runtime.
+- **Backend**: Hono `createApp(db)` factory, `routes/` over a `queries/` layer (`day.ts`, `now.ts`, `heatmap.ts`), Drizzle ORM. Diet-app pattern.
+- **Frontend**: no-build ES-module app (pure calc vs. render modules, including `state.js` / `ui.js`; DST slot indexing; abort/supersede) — [`.claude/frontend.md`](.claude/frontend.md)
+- **Window bounds & cheap-rank polarity**: exclusive `endExclusive` everywhere; `GET /now` `cheaperThanPercent` is high=cheap — [`.claude/windows.md`](.claude/windows.md)
+- **Collection**: systemd timer → `dist/collector.js`; sahkotin historical backfill — [`.claude/collector.md`](.claude/collector.md)
+- **Testing**: backend vitest runs `frontend-*.test.ts`; shared doubles in `test-support/` (including heatmap-execute and window-db builders) — [`.claude/testing.md`](.claude/testing.md)
+- **EMA** (α=0.3) buckets by Helsinki wall-clock hour (DST-correct 23/25h days, not a fixed 4-slot slice)
+- **Heatmap** is the current week's actual hourly prices (SQL-aggregated), greyed cells for missing data
+- **Dependency hygiene**: `backend/package.json` `overrides` aliases deprecated `@esbuild-kit/esm-loader` + `@esbuild-kit/core-utils` (declared by drizzle-kit but never imported — it uses tsx) to `get-tsconfig`. Don't remove the override — it reintroduces the deprecated chain and a stale `esbuild@0.18.20`.
 
 ## Deploy
 
 - Port 3600 · `spot-price.service` · `spot-price-collector.timer` (every 15 min)
+- Postgres via `DATABASE_URL` (database `porssi`). Required by the API and collector; loaded from the project `.env` (systemd `EnvironmentFile`).
 - `deploy` — pushes to forgejo + restarts `spot-price.service` (the collector is timer-driven and picks up new code on its next fire). The forgejo post-receive hook rebuilds the backend and **rsyncs the whole `frontend/` tree** (index.html + styles.css + js/) to `/var/www/html/porssi/` — `frontend/` holds only browser assets, so publishing it wholesale is safe. (Adding a frontend file requires no hook change; adding a non-asset file to `frontend/` would publish it, so keep tests/config in `backend/`.)
 
 ## Decisions from previous phases
@@ -34,7 +31,7 @@
 
 ## History
 
-Historical phase plans (design + implementation) live in `docs/plans/`:
+Historical phase plans (design + implementation) live in `docs/plans/`. They are labelled snapshots of how the project was built, not the current architecture — read `.claude/` and the code for that.
 
 - [Phase 1 design](docs/plans/2026-03-06-spot-price-design.md) · [Phase 1 implementation](docs/plans/2026-03-06-spot-price-implementation.md)
 - [Phase 2 design](docs/plans/2026-03-07-phase2-design.md) · [Phase 2 implementation](docs/plans/2026-03-07-phase2-implementation.md)
