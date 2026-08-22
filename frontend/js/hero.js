@@ -40,5 +40,12 @@ export function renderHero() {
     html += `<div class="hero-card__stale">Viimeisin saatavilla oleva hinta (klo ${formatTime(state.now.slot.datetime)})</div>`;
   }
 
+  // Quarter-hour refresh failed but we still hold a price — keep it on screen
+  // with a note rather than painting "Tietojen lataus epäonnistui" over it
+  // (finding #7102). The next successful load clears refreshFailed.
+  if (state.refreshFailed) {
+    html += '<div class="hero-card__stale">Päivitys epäonnistui — näytetään viimeisin hinta</div>';
+  }
+
   container.innerHTML = html;
 }

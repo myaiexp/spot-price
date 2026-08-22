@@ -63,4 +63,36 @@ describe('fetchAllData', () => {
     expect(today).toEqual({ slots: [] });
     expect(tomorrow).toBeNull();
   });
+
+  it('does not swallow a caller-aborted tomorrow fetch into a resolved null', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.endsWith('/prices/tomorrow')) {
+          throw new DOMException('The operation was aborted.', 'AbortError');
+        }
+        return { ok: true, status: 200, statusText: 'OK', json: async () => ({ slots: [] }) };
+      }),
+    );
+    await expect(fetchAllData(controller.signal)).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
+  it('still degrades a timeout-aborted tomorrow fetch to null', async () => {
+    // Timeout AbortError: the caller's signal is NOT aborted, so unpublished /
+    // slow tomorrow must not fail the whole paint.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.endsWith('/prices/tomorrow')) {
+          throw new DOMException('The operation was aborted.', 'AbortError');
+        }
+        return { ok: true, status: 200, statusText: 'OK', json: async () => ({ slots: [] }) };
+      }),
+    );
+    const [today, , tomorrow] = await fetchAllData(new AbortController().signal);
+    expect(today).toEqual({ slots: [] });
+    expect(tomorrow).toBeNull();
+  });
 });

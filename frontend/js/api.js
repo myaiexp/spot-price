@@ -32,8 +32,14 @@ export function fetchAllData(signal) {
     fetchJSON('/prices/today', signal),
     fetchJSON('/prices/yesterday', signal),
     // Tomorrow is routinely absent before ~14:00; a failure here disables the
-    // tomorrow tab rather than failing the whole paint.
-    fetchJSON('/prices/tomorrow', signal).catch(() => null),
+    // tomorrow tab rather than failing the whole paint. A *caller* abort
+    // (superseded refresh) must still reject — swallowing it as null lets a
+    // stale load resolve and overwrite the newer paint (finding #7108).
+    // Timeout AbortError does not abort `signal`, so it still degrades to null.
+    fetchJSON('/prices/tomorrow', signal).catch((err) => {
+      if (signal?.aborted) throw err;
+      return null;
+    }),
     fetchJSON('/prices/now', signal),
   ]);
 }

@@ -9,6 +9,8 @@ import {
   findDeadlineSlotIndex,
   findOptimalWindow,
   isDeadlineDayUnavailable,
+  parseDeadlineHour,
+  collectEstimatorSlots,
 } from '../../frontend/js/estimator-calc.js';
 
 // Summer (EEST, UTC+3) slot at a Helsinki wall-clock time — deterministic, no DST
@@ -81,6 +83,48 @@ describe('isDeadlineDayUnavailable', () => {
 
   it('is false with no deadline', () => {
     expect(isDeadlineDayUnavailable(todayOnlyEvening, null)).toBe(false);
+  });
+});
+
+describe('parseDeadlineHour', () => {
+  it('returns null for empty or missing input', () => {
+    expect(parseDeadlineHour('')).toBeNull();
+    expect(parseDeadlineHour(null)).toBeNull();
+    expect(parseDeadlineHour(undefined)).toBeNull();
+  });
+
+  it('parses HH:MM into a fractional hour', () => {
+    expect(parseDeadlineHour('07:30')).toBe(7.5);
+    expect(parseDeadlineHour('07:00')).toBe(7);
+    expect(parseDeadlineHour('00:15')).toBe(0.25);
+  });
+
+  it('parses a bare hour with no minutes', () => {
+    expect(parseDeadlineHour('07')).toBe(7);
+  });
+
+  it('returns null for a non-numeric hour', () => {
+    expect(parseDeadlineHour('abc:30')).toBeNull();
+    expect(parseDeadlineHour('not-a-time')).toBeNull();
+  });
+});
+
+describe('collectEstimatorSlots', () => {
+  it('concatenates today then tomorrow and drops slots whose window has ended', () => {
+    const today = { slots: quarterSlots([1, 2, 3, 4]) }; // 00:00 .. 00:45
+    const tomorrow = { slots: [eest(19, 0, 0, 5), eest(19, 0, 15, 6)] };
+    const now = Date.parse(today.slots[1].datetime) + 5 * 60 * 1000; // inside 00:15
+    const kept = collectEstimatorSlots(today, tomorrow, now);
+    expect(kept).toHaveLength(5);
+    expect(kept[0]).toBe(today.slots[1]);
+    expect(kept[3]).toBe(tomorrow.slots[0]);
+  });
+
+  it('skips a missing or empty tomorrow payload', () => {
+    const today = { slots: quarterSlots([1, 2]) };
+    const now = Date.parse(today.slots[0].datetime) - 1;
+    expect(collectEstimatorSlots(today, null, now)).toEqual(today.slots);
+    expect(collectEstimatorSlots(today, { slots: [] }, now)).toEqual(today.slots);
   });
 });
 

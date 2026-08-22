@@ -4,18 +4,21 @@ No-build ES-module app: `frontend/index.html` (markup) + `frontend/styles.css` +
 
 ## Module split
 
-Pure math is side-effect-free and DOM-free. Render modules own the DOM. `main.js` orchestrates.
+Pure math is side-effect-free and DOM-free. Render modules own the DOM. `main.js` is an `init()` call site (index.html calls it; importing the module has no side effects).
 
 **Pure**
 
 | File | Role |
 | --- | --- |
 | `js/calc.js` | Window sums, cheapest/next/peak blocks, EMA, wall-clock ghost alignment |
-| `js/estimator-calc.js` | Deadline resolution, optimal-window search, forward-slot filtering |
+| `js/estimator-calc.js` | Deadline parse + resolution, slot assembly, optimal-window search, forward-slot filtering |
 | `js/slot-time.js` | Helsinki wall-clock + datetime→slot indexing |
 | `js/format.js` | Numeric cent conversion vs. cent *strings* |
 | `js/hero-calc.js` | Cheap-rank → band/tint/copy |
 | `js/insights-calc.js` | Now-index per tab + the three card texts |
+| `js/tab-state.js` | Huomenna enable/fallback to Tänään when tomorrow data is gone |
+| `js/heatmap-calc.js` | Green→amber→red price-to-color scale |
+| `js/load.js` | Abort-supersede load orchestration, isolated renders, last-known-good on refresh blip |
 
 **Render / glue**
 
@@ -26,9 +29,9 @@ Pure math is side-effect-free and DOM-free. Render modules own the DOM. `main.js
 | `js/heatmap.js` | Weekly heatmap |
 | `js/estimator.js` | Cost estimator ("Ajoitusavustin") |
 | `js/hero.js` | Current-price headline |
-| `js/main.js` | Controls, data load, quarter-hour refresh |
+| `js/main.js` | `init()`: wires controls and hands fetch/render into `createLoader` |
 | `js/api.js` | Same-origin `/porssi/api` fetches |
-| `js/state.js` | Shared mutable UI state (`today`/`yesterday`/`tomorrow`/`now`, active tab, heatmap, chart type/resolution, Chart.js instance) |
+| `js/state.js` | Shared mutable UI state (`today`/`yesterday`/`tomorrow`/`now`, active tab, heatmap, chart type/resolution, Chart.js instance, `refreshFailed`) |
 | `js/ui.js` | Generic exclusive toggle-group wiring (click moves `.active`, then `onSelect`) |
 
 ## Slot indices
@@ -37,6 +40,10 @@ All slot indices and labels derive from each slot's `datetime` — never fixed `
 
 ## Fetch abort / supersede
 
-`js/api.js` puts `AbortSignal.timeout(FETCH_TIMEOUT_MS)` (15 s, mirroring the collector) on every request. `main.js` holds one `AbortController` per load so the quarter-hour refresh cancels a still-running previous load instead of stacking. A rejection whose own controller was aborted is a supersede, not a failure — it must not paint an error over the newer load. Heatmap failures call `showHeatmapError()` rather than being swallowed (its placeholder text is distinct from the empty-data "Ei riittävästi tietoja").
+`js/api.js` puts `AbortSignal.timeout(FETCH_TIMEOUT_MS)` (15 s, mirroring the collector) on every request. `js/load.js` holds one `AbortController` per load so the quarter-hour refresh cancels a still-running previous load instead of stacking. A rejection whose own controller was aborted is a supersede, not a failure — it must not paint an error over the newer load, and a superseded resolve must not write state.
+
+Fetch failures stay in the fetch catch: `showError` only when there is no cached data; otherwise keep last-known-good and note staleness on the hero (`state.refreshFailed`). Each renderer runs in its own try so a missing Chart.js global cannot skip insights/estimator or masquerade as a network error. Heatmap failures call `showHeatmapError()` rather than being swallowed (its placeholder text is distinct from the empty-data "Ei riittävästi tietoja"). `/prices/tomorrow` degrades network/timeout failures to null, but a caller abort still rejects so a stale load cannot resolve-over-the-newer-one.
+
+When Huomenna is disabled (no tomorrow slots) while it is the active tab — midnight rollover until ~14:00 — fall back to Tänään so the dashboard does not sit on empty cards.
 
 Window-bound and cheap-rank polarity rules: `.claude/windows.md`. Tests: `.claude/testing.md`.

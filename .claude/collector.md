@@ -7,6 +7,7 @@
 | `src/collectors/spot-hinta.ts` | Live 15-min collect from spot-hinta.fi (`TodayAndDayForward`) |
 | `src/collectors/sahkotin.ts` | Historical hourly backfill (Dec 2012 onward) |
 | `src/collectors/upsert.ts` | Shared upsert into Postgres |
+| `src/collectors/backfill-arg.ts` | `--backfill` / `--backfill=DATE` CLI parse (`walkBackFrom` exclusive bound) |
 
 Both the API (`backend/src/index.ts`) and this CLI refuse to start without `DATABASE_URL`.
 

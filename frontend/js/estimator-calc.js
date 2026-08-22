@@ -1,6 +1,4 @@
-// Pure cost-estimator logic: forward-slot filtering, deadline resolution, and
-// the optimal-window search. Returns slot indices and numeric costs only — time
-// formatting is the estimator view's job — so every branch is unit-testable.
+// Pure cost-estimator logic: slot assembly, deadline parse, window search.
 
 import { SLOT_MS, helsinkiMinutesOfDay, helsinkiDateKey } from './slot-time.js';
 import { windowSums, argMin, argMax } from './calc.js';
@@ -12,11 +10,34 @@ export function futureSlots(slots, nowMs, slotDurationMs = SLOT_MS) {
   return slots.filter((s) => Date.parse(s.datetime) + slotDurationMs > nowMs);
 }
 
+// "07:30" → 7.5, "07" → 7. Empty / non-numeric input is null so findOptimalWindow
+// treats it as "no deadline" rather than NaN (which would skip every slot).
+export function parseDeadlineHour(str) {
+  if (str == null || str === '') return null;
+  const parts = String(str).split(':');
+  const hours = parseInt(parts[0], 10);
+  if (!Number.isFinite(hours)) return null;
+  const minutes = parts.length > 1 ? parseInt(parts[1], 10) : 0;
+  return hours + (Number.isFinite(minutes) ? minutes : 0) / 60;
+}
+
+// Today + tomorrow slots, minus any whose window has already ended. The only
+// slot-assembly the estimator does — pulled out of the DOM module so the
+// money-facing path is unit-tested.
+export function collectEstimatorSlots(today, tomorrow, nowMs) {
+  const slots = [];
+  if (today && today.slots) slots.push(...today.slots);
+  if (tomorrow && tomorrow.slots && tomorrow.slots.length > 0) {
+    slots.push(...tomorrow.slots);
+  }
+  return futureSlots(slots, nowMs);
+}
+
 // Index of the first slot at/after a wall-clock deadline hour (fractional for
 // HH:MM), as the charging window's exclusive upper bound. The deadline is the
 // *next* occurrence of that time of day: one already at/before slots[0]'s
 // time-of-day rolls to the following Helsinki day. Assumes slots span at most two
-// Helsinki days (today + tomorrow), which getEstimatorSlots guarantees. Returns
+// Helsinki days (today + tomorrow), which collectEstimatorSlots guarantees. Returns
 // null when the deadline lands past the last slot.
 export function findDeadlineSlotIndex(slots, deadlineHour) {
   if (!slots || slots.length === 0) return null;

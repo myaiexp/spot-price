@@ -8,97 +8,93 @@ import { renderInsights } from './insights.js';
 import { renderHeatmap, showHeatmapError } from './heatmap.js';
 import { updateEstimator, initEstimator } from './estimator.js';
 import { SLOT_MS } from './slot-time.js';
+import { tomorrowTabDecision } from './tab-state.js';
+import { createLoader, createSlotRefresh } from './load.js';
 
-function updateTomorrowTab() {
+function syncTomorrowTab() {
+  const decision = tomorrowTabDecision(state.tomorrow, state.activeTab);
   const btn = document.getElementById('tabTomorrow');
-  if (!state.tomorrow || !state.tomorrow.slots || state.tomorrow.slots.length === 0) {
-    btn.disabled = true;
-    btn.title = 'Huomisen hintoja ei vielä saatavilla';
-  } else {
-    btn.disabled = false;
-    btn.title = '';
+  if (!btn) return;
+  btn.disabled = !decision.enabled;
+  btn.title = decision.enabled ? '' : 'Huomisen hintoja ei vielä saatavilla';
+  if (decision.activeTab !== state.activeTab) {
+    state.activeTab = decision.activeTab;
+    document.querySelectorAll('.tab-btn').forEach((b) => {
+      b.classList.toggle('active', b.dataset.tab === decision.activeTab);
+    });
   }
 }
 
-// Only one load may be in flight: the quarter-hour tick cancels a still-running
-// previous load instead of stacking requests behind it. A rejection whose own
-// controller was aborted is *us* superseding the load, not a failure — the newer
-// load owns the UI from that point, so it must not paint an error.
-let loadController = null;
+function applyPayload([today, yesterday, tomorrow, now]) {
+  state.today = today;
+  state.yesterday = yesterday;
+  state.tomorrow = tomorrow;
+  state.now = now;
+  state.refreshFailed = false;
+}
 
-async function loadAllData() {
-  loadController?.abort();
-  const controller = new AbortController();
-  loadController = controller;
-  const superseded = () => controller.signal.aborted;
+function hasCachedData() {
+  return !!(
+    (state.now && state.now.slot) ||
+    (state.today && state.today.slots && state.today.slots.length)
+  );
+}
 
+function noteStale() {
+  state.refreshFailed = true;
   try {
-    const [today, yesterday, tomorrow, now] = await fetchAllData(controller.signal);
-    state.today = today;
-    state.yesterday = yesterday;
-    state.tomorrow = tomorrow;
-    state.now = now;
-
-    updateTomorrowTab();
     renderHero();
+  } catch (err) {
+    console.error('Render failed (hero stale note):', err);
+  }
+}
+
+export function init() {
+  wireToggleGroup('.tab-btn', (btn) => {
+    state.activeTab = btn.dataset.tab;
     renderChart();
     renderInsights();
-    updateEstimator();
-  } catch (err) {
-    if (!superseded()) {
-      console.error('Failed to load data:', err);
-      showError('Tietojen lataus epäonnistui. Yritä myöhemmin uudelleen.');
-    }
-  }
+  });
 
-  if (superseded()) return; // a newer load owns the heatmap too
+  wireToggleGroup('#chartTypeToggle .toggle-btn', (btn) => {
+    state.chartType = btn.dataset.value;
+    renderChart();
+  });
 
-  // Load heatmap separately — it's slow on cold start. A failure here is shown
-  // in the heatmap card rather than swallowed, which used to strand it on
-  // "Ladataan..." (audit #5561).
-  fetchHeatmap(controller.signal)
-    .then((heatmap) => {
+  wireToggleGroup('#resolutionToggle .toggle-btn', (btn) => {
+    state.resolution = btn.dataset.value;
+    renderChart();
+  });
+
+  initEstimator();
+
+  const loader = createLoader({
+    fetchAllData,
+    fetchHeatmap,
+    applyPayload,
+    applyHeatmap: (heatmap) => {
       state.heatmap = heatmap;
-      renderHeatmap();
-    })
-    .catch((err) => {
-      if (superseded()) return;
-      console.error('Failed to load heatmap:', err);
-      state.heatmap = null;
-      showHeatmapError();
-    });
+    },
+    renderers: [
+      { name: 'tomorrowTab', run: syncTomorrowTab },
+      { name: 'hero', run: renderHero },
+      { name: 'chart', run: renderChart },
+      { name: 'insights', run: renderInsights },
+      { name: 'estimator', run: updateEstimator },
+    ],
+    renderHeatmap,
+    showError,
+    showHeatmapError,
+    hasCachedData,
+    noteStale,
+    logError: (...args) => console.error(...args),
+  });
+
+  const refresh = createSlotRefresh({
+    slotMs: SLOT_MS,
+    load: loader.load,
+  });
+  setInterval(() => refresh.poll(), 60000);
+
+  loader.load();
 }
-
-// ─── Wiring ──────────────────────────────────────────────────────────
-wireToggleGroup('.tab-btn', (btn) => {
-  state.activeTab = btn.dataset.tab;
-  renderChart();
-  renderInsights();
-});
-
-wireToggleGroup('#chartTypeToggle .toggle-btn', (btn) => {
-  state.chartType = btn.dataset.value;
-  renderChart();
-});
-
-wireToggleGroup('#resolutionToggle .toggle-btn', (btn) => {
-  state.resolution = btn.dataset.value;
-  renderChart();
-});
-
-initEstimator();
-
-// ─── Auto-refresh ────────────────────────────────────────────────────
-// A wall-clock 15-min tick (DST-immune — no h*4 arithmetic): refetch when the
-// current quarter-hour bucket changes.
-let lastTick = Math.floor(Date.now() / SLOT_MS);
-setInterval(() => {
-  const tick = Math.floor(Date.now() / SLOT_MS);
-  if (tick !== lastTick) {
-    lastTick = tick;
-    loadAllData();
-  }
-}, 60000);
-
-// ─── Init ────────────────────────────────────────────────────────────
-loadAllData();

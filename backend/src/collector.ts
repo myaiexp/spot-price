@@ -11,6 +11,7 @@ import { config } from 'dotenv';
 import { createDb } from './db/connection.js';
 import { collectPrices } from './collectors/spot-hinta.js';
 import { backfillPrices } from './collectors/sahkotin.js';
+import { parseBackfillArg } from './collectors/backfill-arg.js';
 
 config();
 
@@ -22,29 +23,19 @@ if (!databaseUrl) {
 
 const db = createDb(databaseUrl);
 
-// `--backfill` runs a full history backfill; `--backfill=2024-01-01` resumes from
-// an explicit exclusive upper bound (walks backwards from that instant) instead
-// of re-walking from Helsinki today midnight.
-const backfillArg = process.argv.find(
-  (a) => a === '--backfill' || a.startsWith('--backfill='),
-);
+const backfill = parseBackfillArg(process.argv);
 
 try {
-  if (backfillArg) {
-    let walkBackFrom: Date | undefined;
-    const eq = backfillArg.indexOf('=');
-    if (eq !== -1) {
-      const dateStr = backfillArg.slice(eq + 1);
-      const parsed = new Date(dateStr);
-      if (Number.isNaN(parsed.getTime())) {
-        console.error(
-          `Invalid --backfill date: "${dateStr}" — use an ISO date, e.g. --backfill=2024-01-01`,
-        );
-        process.exit(1);
-      }
-      walkBackFrom = parsed;
-    }
-    const result = await backfillPrices(db, walkBackFrom ? { walkBackFrom } : {});
+  if (backfill.kind === 'invalid') {
+    console.error(
+      `Invalid --backfill date: "${backfill.dateStr}" — use an ISO date, e.g. --backfill=2024-01-01`,
+    );
+    process.exit(1);
+  } else if (backfill.kind === 'backfill') {
+    const result = await backfillPrices(
+      db,
+      backfill.walkBackFrom ? { walkBackFrom: backfill.walkBackFrom } : {},
+    );
     console.log(`Backfill complete: ${result.totalUpserted} total rows upserted`);
   } else {
     const result = await collectPrices(db);

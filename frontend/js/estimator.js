@@ -2,7 +2,8 @@
 // inputs → cheapest / most expensive charging window and the saving between them.
 import { state } from './state.js';
 import {
-  futureSlots,
+  parseDeadlineHour,
+  collectEstimatorSlots,
   findOptimalWindow,
   isDeadlineDayUnavailable,
 } from './estimator-calc.js';
@@ -57,12 +58,7 @@ function scheduleEstimatorUpdate() {
 // Today + tomorrow slots, minus any whose window has already ended, so the search
 // only ever recommends windows that start now or later.
 function getEstimatorSlots() {
-  let slots = [];
-  if (state.today && state.today.slots) slots = slots.concat(state.today.slots);
-  if (state.tomorrow && state.tomorrow.slots && state.tomorrow.slots.length > 0) {
-    slots = slots.concat(state.tomorrow.slots);
-  }
-  return futureSlots(slots, Date.now());
+  return collectEstimatorSlots(state.today, state.tomorrow, Date.now());
 }
 
 // Format a window {startIndex, endExclusive, cost} against the slots array.
@@ -89,11 +85,7 @@ export function updateEstimator() {
     return;
   }
 
-  let deadlineHour = null;
-  if (deadlineStr) {
-    const parts = deadlineStr.split(':');
-    deadlineHour = parseInt(parts[0]) + parseInt(parts[1] || 0) / 60;
-  }
+  const deadlineHour = parseDeadlineHour(deadlineStr);
 
   const result = findOptimalWindow(slots, duration, power, deadlineHour);
   if (!result) {
