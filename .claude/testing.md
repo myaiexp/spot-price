@@ -14,7 +14,7 @@ DST 92/100-slot days, deadline next-day rollover, `parseDeadlineMinutes` (intege
 
 - `makeSelectDb` / `makeCountingSelectDb` — select-chain resolves a fixed result set (counting variant probes cache hits)
 - `makeInsertDb` / `makeCountingInsertDb` / `makeCapturingInsertDb` — insert-chain resolves a pg-style `{ rowCount }` (count chunks, or capture the rows written plus the `onConflictDoUpdate` config)
-- `makeHeatmapExecuteDb` — `getHeatmap`'s two-call `db.execute` protocol (cells, then ISO week-number). Used by heatmap-week-cache, heatmap-precision, heatmap-cache tests
+- `makeHeatmapExecuteDb` — `getHeatmap`'s two-call `db.execute` protocol (cells, then ISO week-number). Also exposes `lastCellQuery` / `lastWindow` so tests can assert the Helsinki `[Mon 00:00, next Mon 00:00)` SQL bounds (heatmap cannot use `makeWindowFilterDb` — it goes through `db.execute`, not the select-chain). Used by heatmap-week-cache, heatmap-precision, heatmap-cache, and heatmap-window tests
 
 **`window-db.ts`** — WHERE-bound-aware doubles for tests whose contract *is* the query window (`makeSelectDb` ignores WHERE and would hide a shifted bound):
 
