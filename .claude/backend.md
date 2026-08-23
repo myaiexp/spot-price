@@ -14,7 +14,7 @@ Hono `createApp(db)` factory (diet-app pattern): `secureHeaders`, CORS, `onError
 | GET | `/api/prices/range?from&to` | `{ slots, from, to }` | `to` inclusive, max 90 days, valid calendar dates, `from` on or before `to` (`from === to` is one day) |
 | GET | `/api/prices/heatmap` | `{ matrix, minPrice, maxPrice, weekNumber }` | 7×24 Mon-first; missing cells `null` |
 
-A slot is `{ datetime, priceNoTax, priceWithTax }` (ISO instant, EUR/kWh). Heatmap cells are cents/kWh, not EUR. Window bounds and `/now` cheap-rank polarity: `.claude/windows.md`.
+A slot is `{ datetime, priceNoTax, priceWithTax }` (ISO instant, EUR/kWh). Each heatmap `matrix` item is `{ day, hours }` (`day` 0=Mon … 6=Sun, `hours` length 24, cells cents/kWh or `null`; no `label` — frontend maps `day` via `DAY_LABELS` in `heatmap.js`). Window bounds and `/now` cheap-rank polarity: `.claude/windows.md`.
 
 There is no `POST /api/collect` and day endpoints do not return a raw slot array.
 

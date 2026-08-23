@@ -21,9 +21,11 @@ sahkotin.fi API, hourly data from Dec 2012, EUR/MWh → EUR/kWh × 1.255 VAT.
 
 Malformed slots (empty/unparseable `date`, non-finite `value`) are dropped and the skip count is logged, matching live collect. A non-empty `prices` array that filters to nothing throws — it is not end-of-history (`prices: []`), which would truncate the rest of the walk. Live collect (spot-hinta) skips the same class of DateTime garbage so one bad slot cannot poison the upsert.
 
+Scripts live in `backend/package.json` and run `node dist/collector.js` (`dist/` is gitignored). From repo root (the systemd unit's `WorkingDirectory` is already `backend/`):
+
 ```
-npm run backfill                          # full history
-npm run collect -- --backfill=2024-01-01  # resume
+cd backend && npm run build && npm run backfill                          # full history
+cd backend && npm run build && npm run collect -- --backfill=2024-01-01  # resume
 ```
 
 The default exclusive upper bound is Helsinki local midnight of the current Helsinki day — live spot-hinta owns Helsinki today. `--backfill=YYYY-MM-DD` maps to `walkBackFrom` at Helsinki midnight of that day (not UTC midnight — that would be 02:00/03:00 Helsinki and walk into the named day's first hours). A full ISO instant is kept as-is. The walk moves *backwards* from that exclusive upper bound.

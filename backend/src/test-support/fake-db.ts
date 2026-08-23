@@ -121,16 +121,34 @@ export function makeHeatmapExecuteDb(
   return db;
 }
 
-// Insert-chain fake that records the rows handed to .values(), so a test can
-// assert exactly which rows survived filtering. rowCount mirrors the written count.
-export function makeCapturingInsertDb(): { db: Db; captured: { rows: unknown[] } } {
-  const captured: { rows: unknown[] } = { rows: [] };
+// Config handed to onConflictDoUpdate — captured so a test can pin the conflict
+// target and SET columns. Swallowing this argument is what let a missing or
+// partial ON CONFLICT still green the collector suite (finding #7612).
+export interface CapturedConflictUpdate {
+  target: unknown;
+  set: Record<string, unknown>;
+}
+
+// Insert-chain fake that records the rows handed to .values() and the
+// onConflictDoUpdate config, so a test can assert which rows survived filtering
+// and that the upsert actually rewrites both price columns on datetime.
+export function makeCapturingInsertDb(): {
+  db: Db;
+  captured: { rows: unknown[]; conflict: CapturedConflictUpdate | null };
+} {
+  const captured: { rows: unknown[]; conflict: CapturedConflictUpdate | null } = {
+    rows: [],
+    conflict: null,
+  };
   const chain = {
     values: (rows: unknown[]) => {
       captured.rows = rows;
       return chain;
     },
-    onConflictDoUpdate: () => Promise.resolve({ rowCount: captured.rows.length }),
+    onConflictDoUpdate: (config: CapturedConflictUpdate) => {
+      captured.conflict = config;
+      return Promise.resolve({ rowCount: captured.rows.length });
+    },
   };
   return { db: { insert: () => chain } as unknown as Db, captured };
 }

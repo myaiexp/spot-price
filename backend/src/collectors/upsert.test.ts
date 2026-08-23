@@ -1,6 +1,9 @@
-// Tests makePriceInsert NUMERIC(10,5) canonicalization (finding #7132).
+// Tests price-row canonicalization and ON CONFLICT upsert.
 import { describe, it, expect } from 'vitest';
-import { makePriceInsert } from './upsert.js';
+import { makePriceInsert, upsertPrices } from './upsert.js';
+import { prices } from '../db/schema.js';
+import { makeCapturingInsertDb } from '../test-support/fake-db.js';
+import { flattenSqlText } from '../test-support/window-db.js';
 
 const DT = '2026-06-02T12:00:00+03:00';
 
@@ -37,5 +40,22 @@ describe('makePriceInsert (finding #7132)', () => {
     const row = makePriceInsert(DT, 0, 0);
     expect(row.priceNoTax).toBe('0.00000');
     expect(row.priceWithTax).toBe('0.00000');
+  });
+});
+
+describe('upsertPrices ON CONFLICT (finding #7612)', () => {
+  it('targets datetime and rewrites both EXCLUDED price columns', async () => {
+    const { db, captured } = makeCapturingInsertDb();
+
+    await upsertPrices(db, [makePriceInsert(DT, 0.05, 0.06275)]);
+
+    // Dropping onConflictDoUpdate, targeting the wrong key, or SETting only one
+    // column would still green a fake that ignores the config — this is the pin.
+    expect(captured.conflict).not.toBeNull();
+    expect(captured.conflict?.target).toBe(prices.datetime);
+    const set = captured.conflict?.set ?? {};
+    expect(Object.keys(set).sort()).toEqual(['priceNoTax', 'priceWithTax']);
+    expect(flattenSqlText(set.priceNoTax)).toContain('EXCLUDED.price_no_tax');
+    expect(flattenSqlText(set.priceWithTax)).toContain('EXCLUDED.price_with_tax');
   });
 });
