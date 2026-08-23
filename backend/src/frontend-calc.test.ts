@@ -251,6 +251,35 @@ describe('alignSecondaryByWallClock (audit #6332)', () => {
     expect(aligned[4]).toBe(3);
     expect(aligned[5]).toBe(4);
   });
+
+  // Default chart resolution is 15 min (helsinkiMinutesOfDay keys). Hourly-mode
+  // pins above would miss a cursor bug that only fires per duplicated HH:MM.
+  it('consumes fall-back duplicate 03:xx slots in order at 15-min resolution (finding #7616)', () => {
+    const primary = indexSlots('2026-10-24T21:00:00Z', 100);
+    const secondary = indexSlots('2026-10-24T21:00:00Z', 100).map((s, i) => ({
+      ...s,
+      priceWithTax: 100 + i,
+    }));
+    const aligned = alignSecondaryByWallClock(primary, secondary);
+    expect(aligned).toHaveLength(100);
+    // First 03:00/15/30/45 (indices 12–15), then the repeated hour (16–19).
+    expect(aligned.slice(12, 20)).toEqual([112, 113, 114, 115, 116, 117, 118, 119]);
+    expect(aligned[20]).toBe(120); // 04:00
+  });
+
+  it('reuses last secondary 03:xx per wall-clock key on a 25h vs 24h 15-min pair (finding #7616)', () => {
+    const primary = indexSlots('2026-10-24T21:00:00Z', 100);
+    const secondary = indexSlots('2026-07-17T21:00:00Z', 96).map((s, i) => ({
+      ...s,
+      priceWithTax: i,
+    }));
+    const aligned = alignSecondaryByWallClock(primary, secondary);
+    expect(aligned).toHaveLength(100);
+    // Hour-keyed alignment would consume 12,13,14,15 then reuse 15 for all four
+    // extra copies; per-HH:MM reuse is 12/13/14/15 again.
+    expect(aligned.slice(12, 20)).toEqual([12, 13, 14, 15, 12, 13, 14, 15]);
+    expect(aligned[20]).toBe(16); // 04:00
+  });
 });
 
 // Local helper: Helsinki hour of an ISO instant (mirrors slot-time, kept here so

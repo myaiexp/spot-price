@@ -1,9 +1,10 @@
 // Tests for the frontend's API layer (../../frontend/js/api.js): every request
 // carries an abort signal (timeout + caller cancel), 404 means "no data yet"
-// rather than an error, and other non-ok statuses throw.
+// rather than an error, other non-ok statuses throw, today/now failures still
+// reject (last-known-good), and fetchHeatmap hits /prices/heatmap.
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { fetchJSON, fetchAllData } from '../../frontend/js/api.js';
+import { fetchJSON, fetchAllData, fetchHeatmap } from '../../frontend/js/api.js';
 import { stubFetch, stubFailedFetch } from './test-support/fetch-stub.js';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -138,5 +139,37 @@ describe('fetchAllData', () => {
     const [today, , tomorrow] = await fetchAllData(new AbortController().signal);
     expect(today).toEqual({ slots: [] });
     expect(tomorrow).toBeNull();
+  });
+
+  it('rejects when /prices/today throws so last-known-good is kept (finding #7614)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.endsWith('/prices/today')) throw new Error('network down');
+        return { ok: true, status: 200, statusText: 'OK', json: async () => ({ slots: [] }) };
+      }),
+    );
+    await expect(fetchAllData()).rejects.toThrow('network down');
+  });
+
+  it('rejects when /prices/now throws so last-known-good is kept (finding #7614)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.endsWith('/prices/now')) throw new Error('network down');
+        return { ok: true, status: 200, statusText: 'OK', json: async () => ({ slots: [] }) };
+      }),
+    );
+    await expect(fetchAllData()).rejects.toThrow('network down');
+  });
+});
+
+describe('fetchHeatmap', () => {
+  it('requests /prices/heatmap with an abort signal (finding #7614)', async () => {
+    const fetchMock = stubFetch({ cells: [] });
+    const controller = new AbortController();
+    await fetchHeatmap(controller.signal);
+    expect(callsOf(fetchMock)[0][0]).toBe('/porssi/api/prices/heatmap');
+    expect(signalOf(fetchMock)).toBeInstanceOf(AbortSignal);
   });
 });

@@ -1,9 +1,11 @@
 // Tests for the frontend's display formatting (../../frontend/js/format.js):
-// Helsinki wall-clock labels (prose-style fi-FI dots vs colon form for axes
-// and window spans) and the shared slot-window span helper.
+// numeric EUR→cents (chart axis), cent *strings*, Helsinki wall-clock labels
+// (prose-style fi-FI dots vs colon form for axes and window spans).
 
 import { describe, it, expect } from 'vitest';
 import {
+  eurToCents,
+  formatCents,
   formatTime,
   slotLabel,
   hourLabel,
@@ -15,6 +17,21 @@ import { slot } from './test-support/rows.js';
 // 14:30 EEST (UTC+3) — a mid-afternoon instant with a non-zero minute.
 const ISO_1430 = '2026-07-18T11:30:00.000Z';
 const MS_1430 = Date.parse(ISO_1430);
+
+describe('eurToCents / formatCents', () => {
+  it('converts EUR/kWh to a numeric cent value for the chart axis (finding #7615)', () => {
+    expect(eurToCents(0)).toBe(0);
+    expect(eurToCents(0.05)).toBe(5);
+    expect(eurToCents(-0.12)).toBe(-12);
+    expect(typeof eurToCents(0.05)).toBe('number');
+  });
+
+  it('keeps formatCents as a fixed-2 string, distinct from the numeric path', () => {
+    expect(formatCents(0)).toBe('0.00');
+    expect(formatCents(0.05)).toBe('5.00');
+    expect(formatCents(-0.12)).toBe('-12.00');
+  });
+});
 
 describe('formatTime (fi-FI prose, dot separator)', () => {
   it('formats an ISO string, Date, and epoch ms the same way', () => {

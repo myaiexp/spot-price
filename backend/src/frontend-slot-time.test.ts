@@ -5,6 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   SLOT_MS,
+  HOUR_MS,
   toDate,
   helsinkiHourMinute,
   helsinkiMinutesOfDay,
@@ -67,6 +68,21 @@ describe('findSlotContaining', () => {
   });
   it('returns -1 before the first slot', () => {
     expect(findSlotContaining(slots, Date.parse('2026-07-18T11:59:00Z'), SLOT_MS)).toBe(-1);
+  });
+
+  it('finds the hourly bucket whose HOUR_MS window contains the instant (finding #7615)', () => {
+    // Hourly chart 'Nyt' marker: emaAggregate buckets, then HOUR_MS — SLOT_MS
+    // on those buckets would miss every instant past :00–:15.
+    const hourly = [
+      slot('2026-07-18T12:00:00Z'),
+      slot('2026-07-18T13:00:00Z'),
+      slot('2026-07-18T14:00:00Z'),
+    ];
+    expect(findSlotContaining(hourly, Date.parse('2026-07-18T12:20:00Z'), HOUR_MS)).toBe(0);
+    expect(findSlotContaining(hourly, Date.parse('2026-07-18T13:00:00Z'), HOUR_MS)).toBe(1);
+    expect(findSlotContaining(hourly, Date.parse('2026-07-18T13:59:59Z'), HOUR_MS)).toBe(1);
+    expect(findSlotContaining(hourly, Date.parse('2026-07-18T14:00:00Z'), HOUR_MS)).toBe(2);
+    expect(findSlotContaining(hourly, Date.parse('2026-07-18T15:00:00Z'), HOUR_MS)).toBe(-1);
   });
 });
 
