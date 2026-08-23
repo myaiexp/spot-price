@@ -29,4 +29,10 @@ describe('priceToColor', () => {
   it('clamps values above max to the red end', () => {
     expect(priceToColor(50, 0, 10)).toBe('hsl(0, 72%, 50%)');
   });
+
+  it('colours a zero cell when the week range includes negatives (finding #7617)', () => {
+    // 0 is the midpoint of [-10, 10] — a real price, not a missing-data grey.
+    expect(priceToColor(0, -10, 10)).toBe('hsl(39, 85%, 52%)');
+    expect(priceToColor(-10, -10, 10)).toBe('hsl(142, 72%, 50%)');
+  });
 });

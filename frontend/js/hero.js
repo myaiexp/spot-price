@@ -3,13 +3,15 @@ import { state } from './state.js';
 import { formatCents, formatTime } from './format.js';
 import { heroSignal } from './hero-calc.js';
 
-export function showError(msg) {
-  document.getElementById('heroPrice').innerHTML = `<div class="error-msg">${msg}</div>`;
+export function showError(msg, deps) {
+  const doc = deps?.document ?? globalThis.document;
+  doc.getElementById('heroPrice').innerHTML = `<div class="error-msg">${msg}</div>`;
 }
 
-export function renderHero() {
-  const container = document.getElementById('heroPrice');
-  const tint = document.getElementById('heroTint');
+export function renderHero(deps) {
+  const doc = deps?.document ?? globalThis.document;
+  const container = doc.getElementById('heroPrice');
+  const tint = doc.getElementById('heroTint');
 
   if (!state.now || !state.now.slot) {
     container.innerHTML = '<div class="hero-card__loading">Ei hintatietoja saatavilla</div>';

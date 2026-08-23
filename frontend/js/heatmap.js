@@ -8,18 +8,20 @@ const DAY_LABELS = ['Ma', 'Ti', 'Ke', 'To', 'Pe', 'La', 'Su'];
 // the "Ei riittävästi tietoja" empty-data state, so a network error isn't read as
 // "this week has no prices". Without it the card sat on "Ladataan..." forever
 // (audit #5561).
-export function showHeatmapError() {
-  document.getElementById('heatmapGrid').style.display = 'none';
-  const placeholder = document.getElementById('heatmapPlaceholder');
+export function showHeatmapError(deps) {
+  const doc = deps?.document ?? globalThis.document;
+  doc.getElementById('heatmapGrid').style.display = 'none';
+  const placeholder = doc.getElementById('heatmapPlaceholder');
   placeholder.style.display = 'block';
   placeholder.textContent = 'Lämpökartan lataus epäonnistui';
 }
 
-export function renderHeatmap() {
-  const grid = document.getElementById('heatmapGrid');
-  const placeholder = document.getElementById('heatmapPlaceholder');
-  const tooltip = document.getElementById('heatmapTooltip');
-  const weekRange = document.getElementById('heatmapWeekRange');
+export function renderHeatmap(deps) {
+  const doc = deps?.document ?? globalThis.document;
+  const grid = doc.getElementById('heatmapGrid');
+  const placeholder = doc.getElementById('heatmapPlaceholder');
+  const tooltip = doc.getElementById('heatmapTooltip');
+  const weekRange = doc.getElementById('heatmapWeekRange');
 
   if (!state.heatmap || !state.heatmap.matrix || state.heatmap.matrix.length === 0) {
     grid.style.display = 'none';
@@ -45,13 +47,13 @@ export function renderHeatmap() {
   const maxPrice = state.heatmap.maxPrice;
 
   // Corner cell
-  const corner = document.createElement('div');
+  const corner = doc.createElement('div');
   corner.className = 'heatmap-corner';
   grid.appendChild(corner);
 
   // Hour headers
   for (let h = 0; h < 24; h++) {
-    const hdr = document.createElement('div');
+    const hdr = doc.createElement('div');
     hdr.className = 'heatmap-header';
     hdr.textContent = h;
     grid.appendChild(hdr);
@@ -62,13 +64,13 @@ export function renderHeatmap() {
     const row = heatmapData[d];
     const dayLabel = DAY_LABELS[row.day];
 
-    const label = document.createElement('div');
+    const label = doc.createElement('div');
     label.className = 'heatmap-row-label';
     label.textContent = dayLabel;
     grid.appendChild(label);
 
     for (let h = 0; h < 24; h++) {
-      const cell = document.createElement('div');
+      const cell = doc.createElement('div');
       cell.className = 'heatmap-cell';
       const val = row.hours[h];
 

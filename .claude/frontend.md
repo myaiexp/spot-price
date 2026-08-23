@@ -25,9 +25,9 @@ Pure math is side-effect-free and DOM-free. Render modules own the DOM. `main.js
 | --- | --- |
 | `js/chart.js` | Area/bar × 15min/hourly Chart.js |
 | `js/insights.js` | Cheapest 2h / next cheap / peak cards |
-| `js/heatmap.js` | Weekly heatmap |
-| `js/estimator.js` | Cost estimator ("Ajoitusavustin") |
-| `js/hero.js` | Current-price headline |
+| `js/heatmap.js` | Weekly heatmap (optional `{ document }` for tests) |
+| `js/estimator.js` | Cost estimator ("Ajoitusavustin"; optional `{ document, nowMs }` for tests) |
+| `js/hero.js` | Current-price headline (optional `{ document }` for tests) |
 | `js/main.js` | `init()`: wires controls and hands `buildLoaderDeps()` (incl. `hasCachedData` / `noteStale` / `tomorrowTab`) into `createLoader`; `SLOT_REFRESH_MS` is 60s |
 | `js/api.js` | Same-origin `/porssi/api` fetches |
 | `js/load.js` | Abort-supersede load orchestration, isolated renders, last-known-good on refresh blip |

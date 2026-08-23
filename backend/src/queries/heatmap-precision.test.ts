@@ -51,4 +51,33 @@ describe('heatmap NUMERIC aggregate handling (audit #3913)', () => {
     expect(result.minPrice).toBe(10);
     expect(result.maxPrice).toBe(10);
   });
+
+  it('keeps a 0 and a negative NUMERIC average as numeric cells in min/max (finding #7617)', async () => {
+    // heatmap.js greys only null/undefined; 0 is a real Nord Pool hour. Treating
+    // avg_price <= 0 as missing would leave min/max as the remaining positive
+    // cell (10) instead of the negative floor.
+    const getHeatmap = createHeatmap();
+    const result = await getHeatmap(
+      fakeDb([
+        { weekday: 1, hour: 0, avg_price: '0' },
+        { weekday: 1, hour: 1, avg_price: '-0.05000' },
+        { weekday: 1, hour: 2, avg_price: '0.10000' },
+      ]),
+    );
+
+    expect(result.matrix[0].hours[0]).toBe(0);
+    expect(result.matrix[0].hours[1]).toBe(-5);
+    expect(result.matrix[0].hours[2]).toBe(10);
+    expect(result.minPrice).toBe(-5);
+    expect(result.maxPrice).toBe(10);
+  });
+
+  it('reports minPrice/maxPrice 0 when the week has no populated cells', async () => {
+    const getHeatmap = createHeatmap();
+    const result = await getHeatmap(fakeDb([]));
+
+    expect(result.matrix.every((row) => row.hours.every((cell) => cell === null))).toBe(true);
+    expect(result.minPrice).toBe(0);
+    expect(result.maxPrice).toBe(0);
+  });
 });

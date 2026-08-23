@@ -56,8 +56,8 @@ function scheduleEstimatorUpdate() {
 
 // Today + tomorrow slots, minus any whose window has already ended, so the search
 // only ever recommends windows that start now or later.
-function getEstimatorSlots() {
-  return collectEstimatorSlots(state.today, state.tomorrow, Date.now());
+function getEstimatorSlots(nowMs) {
+  return collectEstimatorSlots(state.today, state.tomorrow, nowMs);
 }
 
 // Format a window {startIndex, endExclusive, cost} against the slots array.
@@ -67,18 +67,20 @@ function windowLabel(slots, win) {
   return slotSpanLabel(slots, win.startIndex, win.endExclusive);
 }
 
-export function updateEstimator() {
-  const container = document.getElementById('estimatorResults');
-  const power = parseFloat(document.getElementById('inputPower').value);
-  const duration = parseFloat(document.getElementById('inputDuration').value);
-  const deadlineStr = document.getElementById('inputDeadline').value;
+export function updateEstimator(deps) {
+  const doc = deps?.document ?? globalThis.document;
+  const nowMs = deps?.nowMs ?? Date.now();
+  const container = doc.getElementById('estimatorResults');
+  const power = parseFloat(doc.getElementById('inputPower').value);
+  const duration = parseFloat(doc.getElementById('inputDuration').value);
+  const deadlineStr = doc.getElementById('inputDeadline').value;
 
   if (!power || !duration || power <= 0 || duration <= 0) {
     container.innerHTML = '<div class="estimator-no-data">Valitse laite tai syötä teho ja kesto</div>';
     return;
   }
 
-  const slots = getEstimatorSlots();
+  const slots = getEstimatorSlots(nowMs);
   if (slots.length === 0) {
     container.innerHTML = '<div class="estimator-no-data">Ei hintatietoja laskentaan</div>';
     return;

@@ -60,6 +60,20 @@ describe('fetchSahkotinPrices slot validation (finding #7131, finding #7116)', (
     expect(warn).not.toHaveBeenCalled();
   });
 
+  it('keeps finite zero and negative values (finding #7617)', async () => {
+    // Nord Pool goes negative; a `value > 0` (or `>= 0`) guard would still pass
+    // every other sahkotin fixture, all of which use goodSlot(..., 50).
+    const zero = goodSlot(0, 0);
+    const negative = goodSlot(1, -12.5);
+    stubFetch({ prices: [zero, negative, goodSlot(2, 50)] });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const result = await fetchSahkotinPrices(...RANGE);
+
+    expect(result).toEqual([zero, negative, goodSlot(2, 50)]);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
   it('empty prices array still returns [] (genuine end of history)', async () => {
     stubFetch({ prices: [] });
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});

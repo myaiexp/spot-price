@@ -8,8 +8,8 @@
 // dropped only if the type/finite guard fires.
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { collectPrices } from './spot-hinta.js';
+import { makePriceInsert, type PriceInsert } from './upsert.js';
 import type { Db } from '../db/connection.js';
-import type { PriceInsert } from './upsert.js';
 import { makeCapturingInsertDb as capturingDb } from '../test-support/fake-db.js';
 import { stubFetch } from '../test-support/fetch-stub.js';
 
@@ -131,4 +131,27 @@ describe('collectPrices price-field validation (finding #7130)', () => {
       expect(warn).toHaveBeenCalledWith(expect.stringContaining('Skipped 1 slot(s)'));
     });
   }
+});
+
+describe('collectPrices zero and negative prices (finding #7617)', () => {
+  // Nord Pool goes negative; a `PriceNoTax >= 0` (or `> 0`) guard would still
+  // pass every other collectPrices fixture, all of which use goodSlot() > 0.
+  it('upserts a finite zero and a finite negative alongside a positive sibling', async () => {
+    const negative = { ...goodSlot(0), PriceNoTax: -0.03, PriceWithTax: -0.03765 };
+    const zero = { ...goodSlot(1), PriceNoTax: 0, PriceWithTax: 0 };
+    const positive = goodSlot(2);
+    stubFetch([negative, zero, positive]);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { db, captured } = capturingDb();
+
+    const result = await collectPrices(db);
+
+    expect(result.upserted).toBe(3);
+    expect(warn).not.toHaveBeenCalled();
+    expect(captured.rows).toEqual([
+      makePriceInsert(negative.DateTime, -0.03, -0.03765),
+      makePriceInsert(zero.DateTime, 0, 0),
+      makePriceInsert(positive.DateTime, positive.PriceNoTax, positive.PriceWithTax),
+    ]);
+  });
 });
