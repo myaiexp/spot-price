@@ -209,6 +209,7 @@ body::before {
 }
 
 .chart-container canvas {
+  display: none;
   width: 100% !important;
   height: 260px !important;
 }
@@ -292,8 +293,14 @@ body::before {
   margin-bottom: 12px;
 }
 
+.section-title__meta {
+  color: var(--text-muted);
+  font-size: 0.7em;
+  font-weight: 400;
+}
+
 .heatmap-grid {
-  display: grid;
+  display: none;
   grid-template-columns: auto repeat(24, 1fr);
   gap: 2px;
   overflow: hidden;

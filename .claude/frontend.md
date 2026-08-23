@@ -1,10 +1,10 @@
 # Frontend
 
-No-build ES-module app: `frontend/index.html` (markup) + `frontend/styles.css` + `frontend/js/*.js` loaded via `<script type="module">`. Chart.js from CDN. Design system is mase.fi's (near-black, golden-amber accent, Bricolage Grotesque + DM Sans).
+No-build ES-module app: `frontend/index.html` (markup) + `frontend/styles.css` + `frontend/js/*.js` loaded via `<script type="module" src="./js/main.js">` (no inline boot — CSP `script-src` omits `'unsafe-inline'`). Chart.js from CDN. Design system is mase.fi's (near-black, golden-amber accent, Bricolage Grotesque + DM Sans). The `/porssi` nginx location sets the CSP; committed snippet is `deploy/nginx-porssi.conf`.
 
 ## Module split
 
-Pure math is side-effect-free and DOM-free. Render modules own the DOM. `main.js` is an `init()` call site (index.html calls it; importing the module has no side effects).
+Pure math is side-effect-free and DOM-free. Render modules own the DOM. `main.js` auto-calls `init()` as the page entry; importing it under Vitest has no side effects.
 
 **Pure**
 
@@ -28,7 +28,7 @@ Pure math is side-effect-free and DOM-free. Render modules own the DOM. `main.js
 | `js/heatmap.js` | Weekly heatmap (optional `{ document }` for tests) |
 | `js/estimator.js` | Cost estimator ("Ajoitusavustin"; optional `{ document, nowMs }` for tests) |
 | `js/hero.js` | Current-price headline (optional `{ document }` for tests) |
-| `js/main.js` | `init()`: wires controls and hands `buildLoaderDeps()` (incl. `hasCachedData` / `noteStale` / `tomorrowTab`) into `createLoader`; `SLOT_REFRESH_MS` is 60s |
+| `js/main.js` | `init()`: wires controls and hands `buildLoaderDeps()` (incl. `hasCachedData` / `noteStale` / `tomorrowTab`) into `createLoader`; `SLOT_REFRESH_MS` is 60s. Auto-calls `init()` unless Vitest imported the module (`process.env.VITEST`) so index.html needs no inline script |
 | `js/api.js` | Same-origin `/porssi/api` fetches |
 | `js/load.js` | Abort-supersede load orchestration, isolated renders, last-known-good on refresh blip |
 | `js/state.js` | Shared mutable UI state (`today`/`yesterday`/`tomorrow`/`now`, active tab, heatmap, chart type/resolution, Chart.js instance, `refreshFailed`) |

@@ -20,6 +20,7 @@ This file is a **map**, not a manual. Standing architecture lives in `.claude/`.
 - Port 3600 · `spot-price.service` · `spot-price-collector.timer` (every 15 min)
 - Postgres via `DATABASE_URL` (database `porssi`). Required by the API and collector; loaded from the project `.env` (systemd `EnvironmentFile`).
 - `deploy` — pushes to forgejo + restarts `spot-price.service` (the collector is timer-driven and picks up new code on its next fire). The forgejo post-receive hook rebuilds the backend and **rsyncs the whole `frontend/` tree** (index.html + styles.css + js/) to `/var/www/html/porssi/` — `frontend/` holds only browser assets, so publishing it wholesale is safe. (Adding a frontend file requires no hook change; adding a non-asset file to `frontend/` would publish it, so keep tests/config in `backend/`.)
+- `/porssi` nginx location sets CSP (and re-lists server-level security headers — nginx `add_header` is all-or-nothing). Snippet: `deploy/nginx-porssi.conf`. Live copy is `location /porssi` in `/etc/nginx/sites-enabled/default`.
 
 ## Decisions from previous phases
 

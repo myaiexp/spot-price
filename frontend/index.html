@@ -49,7 +49,7 @@
     <!-- Chart -->
     <div class="chart-container card" id="chartContainer">
       <div class="chart-placeholder" id="chartPlaceholder">Ladataan...</div>
-      <canvas id="priceChart" style="display:none;"></canvas>
+      <canvas id="priceChart"></canvas>
     </div>
 
     <!-- Insights -->
@@ -76,10 +76,10 @@
 
     <!-- Heatmap -->
     <div class="heatmap-section">
-      <h2 class="section-title">Viikkokuvio <span id="heatmapWeekRange" style="color: var(--text-muted); font-size: 0.7em; font-weight: 400;"></span></h2>
+      <h2 class="section-title">Viikkokuvio <span id="heatmapWeekRange" class="section-title__meta"></span></h2>
       <div class="card" id="heatmapCard">
         <div class="heatmap-placeholder" id="heatmapPlaceholder">Ladataan...</div>
-        <div class="heatmap-grid" id="heatmapGrid" style="display:none;"></div>
+        <div class="heatmap-grid" id="heatmapGrid"></div>
       </div>
     </div>
     <div class="heatmap-tooltip" id="heatmapTooltip"></div>
@@ -113,9 +113,6 @@
     </footer>
   </div>
 
-  <script type="module">
-    import { init } from './js/main.js';
-    init();
-  </script>
+  <script type="module" src="./js/main.js"></script>
 </body>
 </html>

@@ -112,3 +112,10 @@ export function init(hooks = {}) {
 
   loader.load();
 }
+
+// Page entry: index.html loads this file as type=module so script-src can
+// omit 'unsafe-inline' (finding #7954). Tests import named exports and call
+// init() themselves; Vitest sets VITEST so this is a no-op under the runner.
+if (!globalThis.process?.env?.VITEST) {
+  init();
+}
