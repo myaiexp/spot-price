@@ -23,7 +23,7 @@ Pure math is side-effect-free and DOM-free. Render modules own the DOM. `main.js
 
 | File | Role |
 | --- | --- |
-| `js/chart.js` | Area/bar × 15min/hourly Chart.js |
+| `js/chart.js` | Area/bar × 15min/hourly Chart.js (optional `{ document, nowMs, Chart, matchMedia }` for tests) |
 | `js/insights.js` | Cheapest 2h / next cheap / peak cards (optional `{ document, nowMs }` for tests) |
 | `js/heatmap.js` | Weekly heatmap (optional `{ document }` for tests) |
 | `js/estimator.js` | Cost estimator ("Ajoitusavustin"; optional `{ document, nowMs }` for tests) |

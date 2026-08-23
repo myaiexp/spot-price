@@ -6,9 +6,13 @@
 // backfillPrices reads [] as "no more history" and stops cleanly.
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { fetchSahkotinPrices } from './sahkotin.js';
+import { FETCH_TIMEOUT_MS } from '../utils/http.js';
 import { stubFetch as stubOkFetch } from '../test-support/fetch-stub.js';
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 describe('fetchSahkotinPrices success path (audit #3965)', () => {
   it('returns the prices array from a well-formed response', async () => {
@@ -37,14 +41,16 @@ describe('fetchSahkotinPrices success path (audit #3965)', () => {
     expect(url).not.toContain('+02:00');
   });
 
-  it('follows redirects and attaches a timeout signal', async () => {
+  it('follows redirects and attaches AbortSignal.timeout(FETCH_TIMEOUT_MS) (finding #7901)', async () => {
+    const timeoutSpy = vi.spyOn(AbortSignal, 'timeout');
     const fetchMock = stubOkFetch({ prices: [] });
 
     await fetchSahkotinPrices('2024-01-01T00:00:00Z', '2024-01-02T00:00:00Z');
 
     const opts = fetchMock.mock.calls[0][1] as RequestInit;
     expect(opts.redirect).toBe('follow');
-    expect(opts.signal).toBeInstanceOf(AbortSignal);
+    expect(timeoutSpy).toHaveBeenCalledWith(FETCH_TIMEOUT_MS);
+    expect(opts.signal).toBe(timeoutSpy.mock.results[0]?.value);
   });
 });
 

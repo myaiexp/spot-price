@@ -4,10 +4,13 @@
 // reject (last-known-good), and fetchHeatmap hits /prices/heatmap.
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { fetchJSON, fetchAllData, fetchHeatmap } from '../../frontend/js/api.js';
+import { fetchJSON, fetchAllData, fetchHeatmap, FETCH_TIMEOUT_MS } from '../../frontend/js/api.js';
 import { stubFetch, stubFailedFetch } from './test-support/fetch-stub.js';
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 // The stub helpers declare 0-arg mocks; the recorded args are still there, so
 // read them through one loosely-typed accessor instead of casting at each use.
@@ -15,18 +18,26 @@ const callsOf = (mock: unknown) => (mock as { mock: { calls: unknown[][] } }).mo
 const signalOf = (mock: unknown, call = 0) => (callsOf(mock)[call][1] as RequestInit).signal;
 
 describe('fetchJSON', () => {
-  it('bounds every request with an abort signal', async () => {
+  it('pins FETCH_TIMEOUT_MS at 15 seconds (finding #7901, audit #5562)', () => {
+    expect(FETCH_TIMEOUT_MS).toBe(15_000);
+  });
+
+  it('bounds every request with AbortSignal.timeout(FETCH_TIMEOUT_MS) (finding #7901)', async () => {
+    const timeoutSpy = vi.spyOn(AbortSignal, 'timeout');
     const fetchMock = stubFetch({ slots: [] });
     await fetchJSON('/prices/today');
     expect(callsOf(fetchMock)[0][0]).toBe('/porssi/api/prices/today');
-    expect(signalOf(fetchMock)).toBeInstanceOf(AbortSignal);
+    expect(timeoutSpy).toHaveBeenCalledWith(FETCH_TIMEOUT_MS);
+    expect(signalOf(fetchMock)).toBe(timeoutSpy.mock.results[0]?.value);
   });
 
   it('aborts when the caller signal fires before the timeout', async () => {
+    const timeoutSpy = vi.spyOn(AbortSignal, 'timeout');
     const fetchMock = stubFetch({ slots: [] });
     const controller = new AbortController();
     await fetchJSON('/prices/today', controller.signal);
     const signal = signalOf(fetchMock)!;
+    expect(timeoutSpy).toHaveBeenCalledWith(FETCH_TIMEOUT_MS);
     expect(signal.aborted).toBe(false);
     controller.abort();
     expect(signal.aborted).toBe(true);

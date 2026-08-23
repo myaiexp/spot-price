@@ -19,9 +19,13 @@ function buildGradient(ctx, chartArea, forBar = false) {
   return gradient;
 }
 
-export function renderChart() {
-  const canvas = document.getElementById('priceChart');
-  const placeholder = document.getElementById('chartPlaceholder');
+export function renderChart(deps) {
+  const doc = deps?.document ?? globalThis.document;
+  const nowMs = deps?.nowMs ?? Date.now();
+  const ChartCtor = deps?.Chart ?? globalThis.Chart;
+  const matchMedia = deps?.matchMedia ?? ((q) => globalThis.window.matchMedia(q));
+  const canvas = doc.getElementById('priceChart');
+  const placeholder = doc.getElementById('chartPlaceholder');
 
   const isToday = state.activeTab === 'today';
   const primary = isToday ? state.today : state.tomorrow;
@@ -66,7 +70,7 @@ export function renderChart() {
   // "Now" x-position: the slot/hour bucket whose window contains the current
   // instant (−1 when outside the shown data, e.g. after midnight rollover).
   const nowIndex = isToday
-    ? findSlotContaining(primarySlots, Date.now(), isHourly ? HOUR_MS : SLOT_MS)
+    ? findSlotContaining(primarySlots, nowMs, isHourly ? HOUR_MS : SLOT_MS)
     : -1;
 
   const primaryDataset = {
@@ -131,7 +135,7 @@ export function renderChart() {
     };
   }
 
-  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   const config = {
     type: isBar ? 'bar' : 'line',
@@ -212,5 +216,5 @@ export function renderChart() {
   if (state.chart) {
     state.chart.destroy();
   }
-  state.chart = new Chart(canvas, config);
+  state.chart = new ChartCtor(canvas, config);
 }
