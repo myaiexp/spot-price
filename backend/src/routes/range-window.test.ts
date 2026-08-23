@@ -80,3 +80,103 @@ describe('GET /range query window', () => {
     ]);
   });
 });
+
+const HOUR = 3_600_000;
+
+describe('GET /range query window across DST', () => {
+  it('spring-forward from===to (2026-03-29) is 23h, excludes next Helsinki midnight', async () => {
+    // 03-29 00:00 is still EET; 03-30 00:00 is already EEST. A UTC-midnight
+    // window or a 24h millisecond span from start would both include the next
+    // day's first slot (21:00Z) and a 24h span is the slip this file exists to
+    // catch — winter 24h fixtures cannot see it.
+    const rows = [
+      row('2026-03-28T22:00:00.000Z', 1), // 00:00 EET 03-29 — first slot
+      row('2026-03-29T20:45:00.000Z', 2), // 23:45 EEST 03-29 — last slot
+      row('2026-03-29T21:00:00.000Z', 3), // 00:00 EEST 03-30 — must be EXCLUDED
+    ];
+    const { db, lastWindow } = makeWindowFilterDb(rows);
+    const app = createApp(db);
+    const res = await app.request('/api/prices/range?from=2026-03-29&to=2026-03-29');
+    expect(res.status).toBe(200);
+
+    const window = lastWindow();
+    expect(window).toEqual(expectedWindow('2026-03-29', '2026-03-29'));
+    expect(window).toEqual({
+      gte: '2026-03-28T22:00:00.000Z',
+      lt: '2026-03-29T21:00:00.000Z',
+    });
+    const span = new Date(window!.lt).getTime() - new Date(window!.gte).getTime();
+    expect(span).toBe(23 * HOUR);
+    expect(span).not.toBe(24 * HOUR);
+
+    const body = (await res.json()) as { slots: { datetime: string }[] };
+    expect(body.slots.map((s) => s.datetime)).toEqual([
+      '2026-03-28T22:00:00.000Z',
+      '2026-03-29T20:45:00.000Z',
+    ]);
+  });
+
+  it('fall-back from===to (2026-10-25) is 25h, includes the repeated hour', async () => {
+    // 10-25 00:00 is EEST; 10-26 00:00 is EET. A 24h span from start would
+    // drop the last hour of the 25h day (last slot 21:45Z); UTC midnight of
+    // 10-25 would drop the first 3h and include the next Helsinki day's start.
+    const rows = [
+      row('2026-10-24T21:00:00.000Z', 1), // 00:00 EEST 10-25 — first slot
+      row('2026-10-25T21:45:00.000Z', 2), // 23:45 EET 10-25 — last slot of the extra hour
+      row('2026-10-25T22:00:00.000Z', 3), // 00:00 EET 10-26 — must be EXCLUDED
+    ];
+    const { db, lastWindow } = makeWindowFilterDb(rows);
+    const app = createApp(db);
+    const res = await app.request('/api/prices/range?from=2026-10-25&to=2026-10-25');
+    expect(res.status).toBe(200);
+
+    const window = lastWindow();
+    expect(window).toEqual(expectedWindow('2026-10-25', '2026-10-25'));
+    expect(window).toEqual({
+      gte: '2026-10-24T21:00:00.000Z',
+      lt: '2026-10-25T22:00:00.000Z',
+    });
+    const span = new Date(window!.lt).getTime() - new Date(window!.gte).getTime();
+    expect(span).toBe(25 * HOUR);
+    expect(span).not.toBe(24 * HOUR);
+
+    const body = (await res.json()) as { slots: { datetime: string }[] };
+    expect(body.slots.map((s) => s.datetime)).toEqual([
+      '2026-10-24T21:00:00.000Z',
+      '2026-10-25T21:45:00.000Z',
+    ]);
+  });
+
+  it('multi-day range containing spring-forward is 71h, not 3×24h', async () => {
+    // 03-28 EET 24h + 03-29 23h + 03-30 EEST 24h. A naive fromStart + 3*86400000
+    // ends at 03-30T22:00Z and would include the next day's first slot.
+    const rows = [
+      row('2026-03-27T22:00:00.000Z', 1), // 00:00 EET 03-28 — first of `from`
+      row('2026-03-29T12:00:00.000Z', 2), // inside the 23h day
+      row('2026-03-30T20:45:00.000Z', 3), // 23:45 EEST 03-30 — last of `to`
+      row('2026-03-30T21:00:00.000Z', 4), // 00:00 EEST 03-31 — EXCLUDED
+    ];
+    const { db, lastWindow } = makeWindowFilterDb(rows);
+    const app = createApp(db);
+    const res = await app.request('/api/prices/range?from=2026-03-28&to=2026-03-30');
+    expect(res.status).toBe(200);
+
+    const window = lastWindow();
+    expect(window).toEqual(expectedWindow('2026-03-28', '2026-03-30'));
+    expect(window).toEqual({
+      gte: '2026-03-27T22:00:00.000Z',
+      lt: '2026-03-30T21:00:00.000Z',
+    });
+    const span = new Date(window!.lt).getTime() - new Date(window!.gte).getTime();
+    expect(span).toBe(71 * HOUR);
+    expect(span).not.toBe(72 * HOUR);
+
+    const body = (await res.json()) as { slots: { datetime: string }[] };
+    expect(body.slots.map((s) => s.datetime)).toEqual([
+      '2026-03-27T22:00:00.000Z',
+      '2026-03-29T12:00:00.000Z',
+      '2026-03-30T20:45:00.000Z',
+    ]);
+  });
+});
+
