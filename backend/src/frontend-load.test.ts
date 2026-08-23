@@ -1,9 +1,10 @@
 // Tests for the dashboard load orchestrator (../../frontend/js/load.js).
 // Abort-supersede must not paint an error over a newer load, a superseded
 // resolve must not overwrite state, render exceptions stay isolated from fetch
-// failures, heatmap rejections call showHeatmapError, and a refresh blip keeps
-// last-known-good data instead of wiping the hero (findings #7136, #7109,
-// #7108, #7102, #7101).
+// failures, heatmap rejections call showHeatmapError, a day-data fetch failure
+// still starts the heatmap, and a refresh blip keeps last-known-good data
+// instead of wiping the hero (findings #7136, #7109, #7108, #7102, #7101,
+// #7621).
 
 import { describe, it, expect } from 'vitest';
 import { createLoader, createSlotRefresh } from '../../frontend/js/load.js';
@@ -35,6 +36,7 @@ function makeHarness({ chartThrows = false, ...overrides } = {}) {
     apply: [],
     applyHeatmap: [],
     renderHeatmap: 0,
+    fetchHeatmap: 0,
     noteStale: 0,
     logError: [],
   };
@@ -72,6 +74,11 @@ function makeHarness({ chartThrows = false, ...overrides } = {}) {
     },
     logError: (...args) => calls.logError.push(args),
     ...overrides,
+  };
+  const innerFetchHeatmap = deps.fetchHeatmap;
+  deps.fetchHeatmap = (signal) => {
+    calls.fetchHeatmap += 1;
+    return innerFetchHeatmap(signal);
   };
   return { loader: createLoader(deps), deps, calls };
 }
@@ -144,24 +151,35 @@ describe('createLoader fetch vs render isolation', () => {
       },
     });
     await loader.load();
+    await loader.heatmapPromise;
     expect(calls.showError).toHaveLength(1);
     expect(calls.showError[0]).toMatch(/Tietojen lataus epäonnistui/);
     expect(calls.noteStale).toBe(0);
     expect(calls.apply).toEqual([]);
     expect(calls.renderers).toEqual([]);
+    expect(calls.fetchHeatmap).toBe(1);
+    expect(calls.applyHeatmap).toEqual([HEATMAP]);
+    expect(calls.showHeatmapError).toEqual([]);
+    expect(calls.renderHeatmap).toBe(1);
   });
 
   it('keeps last-known-good data on a refresh failure instead of showError', async () => {
     const { loader, deps, calls } = makeHarness();
     await loader.load();
+    await loader.heatmapPromise;
     expect(calls.apply).toHaveLength(1);
+    expect(calls.fetchHeatmap).toBe(1);
     deps.fetchAllData = async () => {
       throw new Error('blip');
     };
     await loader.load();
+    await loader.heatmapPromise;
     expect(calls.showError).toEqual([]);
     expect(calls.noteStale).toBe(1);
     expect(calls.apply).toHaveLength(1);
+    expect(calls.fetchHeatmap).toBe(2);
+    expect(calls.applyHeatmap).toEqual([HEATMAP, HEATMAP]);
+    expect(calls.showHeatmapError).toEqual([]);
   });
 
   it('still runs later renderers when one throws, and does not showError', async () => {
@@ -174,6 +192,24 @@ describe('createLoader fetch vs render isolation', () => {
 });
 
 describe('createLoader heatmap failure', () => {
+  it('calls showHeatmapError when heatmap throws after a day-data fetch failure', async () => {
+    const { loader, calls } = makeHarness({
+      fetchAllData: async () => {
+        throw new Error('network down');
+      },
+      fetchHeatmap: async () => {
+        throw new Error('heatmap down');
+      },
+    });
+    await loader.load();
+    await loader.heatmapPromise;
+    expect(calls.showError).toHaveLength(1);
+    expect(calls.fetchHeatmap).toBe(1);
+    expect(calls.showHeatmapError).toEqual([true]);
+    expect(calls.renderHeatmap).toBe(0);
+    expect(calls.applyHeatmap).toEqual([null]);
+  });
+
   it('calls showHeatmapError on heatmap rejection, not renderHeatmap', async () => {
     const { loader, calls } = makeHarness({
       fetchHeatmap: async () => {
