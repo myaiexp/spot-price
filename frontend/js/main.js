@@ -82,11 +82,13 @@ export function init(hooks = {}) {
   const createSlotRefreshFn = hooks.createSlotRefresh ?? createSlotRefresh;
   const setIntervalFn = hooks.setInterval ?? setInterval;
   const initEstimatorFn = hooks.initEstimator ?? initEstimator;
+  const renderChartFn = hooks.renderChart ?? renderChart;
+  const renderInsightsFn = hooks.renderInsights ?? renderInsights;
 
   wireToggleGroup('.tab-btn', (btn) => {
     state.activeTab = btn.dataset.tab;
-    renderChart();
-    renderInsights();
+    renderChartFn();
+    renderInsightsFn();
   });
 
   wireToggleGroup('#chartTypeToggle .toggle-btn', (btn) => {

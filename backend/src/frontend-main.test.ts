@@ -1,8 +1,9 @@
 // Tests for the dashboard entry wiring (../../frontend/js/main.js).
 // createLoader's last-known-good path is optional, so load tests that inject
 // hasCachedData themselves cannot catch init() omitting it. These pin the
-// production deps object and that a disabled Huomenna click through init's
-// tab wiring does not switch tabs (finding #7619).
+// production deps object, that a disabled Huomenna click does not switch tabs
+// (finding #7619), and that an enabled click re-renders insights + chart
+// (finding #7898).
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { state } from '../../frontend/js/state.js';
@@ -203,5 +204,31 @@ describe('init production wiring (finding #7619)', () => {
     expect(state.activeTab).toBe('today');
     expect(today.classList.contains('active')).toBe(true);
     expect(tomorrow.classList.contains('active')).toBe(false);
+  });
+
+  it('re-renders insights and chart when an enabled Huomenna tab is clicked (finding #7898)', () => {
+    // A click that set activeTab without renderInsights/renderChart would
+    // revive the stale-card bug (audit #5552) and ship. The disabled-click
+    // case above cannot catch that — it never reaches the handler.
+    const today = button({ active: true, dataset: { tab: 'today' } });
+    const tomorrow = button({
+      dataset: { tab: 'tomorrow' },
+      id: 'tabTomorrow',
+    });
+    stubDocument({
+      tabs: [today, tomorrow],
+      byId: { tabTomorrow: tomorrow },
+    });
+    const renderChart = vi.fn();
+    const renderInsights = vi.fn();
+    initWithCapture({ renderChart, renderInsights });
+
+    tomorrow.click();
+
+    expect(state.activeTab).toBe('tomorrow');
+    expect(tomorrow.classList.contains('active')).toBe(true);
+    expect(today.classList.contains('active')).toBe(false);
+    expect(renderInsights).toHaveBeenCalledOnce();
+    expect(renderChart).toHaveBeenCalledOnce();
   });
 });

@@ -1,9 +1,12 @@
-// Pins the hero renderer's user-visible recovery copy (finding #7618).
-// load.js only asserts that noteStale fires; the Finnish strings live in
-// hero.js. A document-like deps object lets us call renderHero without jsdom.
+// Pins the hero renderer's user-visible copy (finding #7618, finding #7900).
+// load.js only asserts that noteStale fires; cheap-rank polarity lives in
+// hero-calc. These assert renderHero actually paints the tint, caption,
+// yesterday line, empty placeholder, and recovery notes — so an inverted
+// comparison inlined in the renderer cannot leave calc/route tests green.
 
 import { describe, it, expect, afterEach } from 'vitest';
 import { renderHero } from '../../frontend/js/hero.js';
+import { HERO_TINTS } from '../../frontend/js/hero-calc.js';
 import { state } from '../../frontend/js/state.js';
 import { fakeDocument, fakeEl } from './test-support/fake-dom.js';
 
@@ -82,5 +85,63 @@ describe('renderHero recovery copy (finding #7618)', () => {
     expect(els.heroPrice.innerHTML).toContain('5.00');
     expect(els.heroPrice.innerHTML).not.toContain('klo 14.30');
     expect(els.heroPrice.innerHTML).not.toContain('Päivitys epäonnistui');
+  });
+});
+
+describe('renderHero cheap-rank caption, tint, empty (finding #7900)', () => {
+  it('paints a cheap rank green and captions Halvempi kuin 80% tänään', () => {
+    withPrice({ cheaperThanPercent: 80 });
+    const { doc, els } = heroDoc();
+
+    renderHero({ document: doc });
+
+    expect(els.heroTint.style.background).toBe(HERO_TINTS.cheap);
+    expect(els.heroTint.style.background).not.toBe(HERO_TINTS.expensive);
+    expect(els.heroPrice.innerHTML).toContain('Halvempi kuin 80% tänään');
+  });
+
+  it('paints a peak rank (0) red, never green', () => {
+    withPrice({ cheaperThanPercent: 0 });
+    const { doc, els } = heroDoc();
+
+    renderHero({ document: doc });
+
+    expect(els.heroTint.style.background).toBe(HERO_TINTS.expensive);
+    expect(els.heroTint.style.background).not.toBe(HERO_TINTS.cheap);
+    expect(els.heroPrice.innerHTML).toContain('Halvempi kuin 0% tänään');
+  });
+
+  it('shows the yesterday-same-time line when yesterdaySlot is present', () => {
+    withPrice({
+      yesterdaySlot: { datetime: SLOT_ISO, priceWithTax: 0.08, priceNoTax: 0.06 },
+    });
+    const { doc, els } = heroDoc();
+
+    renderHero({ document: doc });
+
+    expect(els.heroPrice.innerHTML).toContain('Eilen samaan aikaan');
+    expect(els.heroPrice.innerHTML).toContain('8.00');
+  });
+
+  it('swaps the loading placeholder for Ei hintatietoja when now is missing', () => {
+    state.now = null;
+    const { doc, els } = heroDoc();
+
+    renderHero({ document: doc });
+
+    expect(els.heroPrice.innerHTML).toContain('Ei hintatietoja saatavilla');
+    expect(els.heroPrice.innerHTML).not.toContain('Halvempi kuin');
+    expect(els.heroTint.style.background).toBeUndefined();
+  });
+
+  it('treats a now payload without a slot the same as missing now', () => {
+    state.now = { cheaperThanPercent: 80 };
+    const { doc, els } = heroDoc();
+
+    renderHero({ document: doc });
+
+    expect(els.heroPrice.innerHTML).toContain('Ei hintatietoja saatavilla');
+    expect(els.heroPrice.innerHTML).not.toContain('Halvempi kuin');
+    expect(els.heroTint.style.background).toBeUndefined();
   });
 });
