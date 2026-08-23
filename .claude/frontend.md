@@ -28,11 +28,11 @@ Pure math is side-effect-free and DOM-free. Render modules own the DOM. `main.js
 | `js/heatmap.js` | Weekly heatmap |
 | `js/estimator.js` | Cost estimator ("Ajoitusavustin") |
 | `js/hero.js` | Current-price headline |
-| `js/main.js` | `init()`: wires controls and hands fetch/render into `createLoader` |
+| `js/main.js` | `init()`: wires controls and hands `buildLoaderDeps()` (incl. `hasCachedData` / `noteStale` / `tomorrowTab`) into `createLoader`; `SLOT_REFRESH_MS` is 60s |
 | `js/api.js` | Same-origin `/porssi/api` fetches |
 | `js/load.js` | Abort-supersede load orchestration, isolated renders, last-known-good on refresh blip |
 | `js/state.js` | Shared mutable UI state (`today`/`yesterday`/`tomorrow`/`now`, active tab, heatmap, chart type/resolution, Chart.js instance, `refreshFailed`) |
-| `js/ui.js` | Generic exclusive toggle-group wiring (click moves `.active`, then `onSelect`) |
+| `js/ui.js` | Generic exclusive toggle-group wiring (click moves `.active`, then `onSelect`; disabled buttons no-op, checked at click time) |
 
 ## Slot indices
 

@@ -11,6 +11,8 @@ import { SLOT_MS } from './slot-time.js';
 import { tomorrowTabDecision } from './tab-state.js';
 import { createLoader, createSlotRefresh } from './load.js';
 
+export const SLOT_REFRESH_MS = 60_000;
+
 function syncTomorrowTab() {
   const decision = tomorrowTabDecision(state.tomorrow, state.activeTab);
   const btn = document.getElementById('tabTomorrow');
@@ -33,14 +35,14 @@ function applyPayload([today, yesterday, tomorrow, now]) {
   state.refreshFailed = false;
 }
 
-function hasCachedData() {
+export function hasCachedData() {
   return !!(
     (state.now && state.now.slot) ||
     (state.today && state.today.slots && state.today.slots.length)
   );
 }
 
-function noteStale() {
+export function noteStale() {
   state.refreshFailed = true;
   try {
     renderHero();
@@ -49,26 +51,10 @@ function noteStale() {
   }
 }
 
-export function init() {
-  wireToggleGroup('.tab-btn', (btn) => {
-    state.activeTab = btn.dataset.tab;
-    renderChart();
-    renderInsights();
-  });
-
-  wireToggleGroup('#chartTypeToggle .toggle-btn', (btn) => {
-    state.chartType = btn.dataset.value;
-    renderChart();
-  });
-
-  wireToggleGroup('#resolutionToggle .toggle-btn', (btn) => {
-    state.resolution = btn.dataset.value;
-    renderChart();
-  });
-
-  initEstimator();
-
-  const loader = createLoader({
+// Production loader wiring. Extracted so tests can pin hasCachedData / noteStale
+// / the tomorrowTab renderer without booting the whole dashboard (finding #7619).
+export function buildLoaderDeps() {
+  return {
     fetchAllData,
     fetchHeatmap,
     applyPayload,
@@ -88,13 +74,39 @@ export function init() {
     hasCachedData,
     noteStale,
     logError: (...args) => console.error(...args),
+  };
+}
+
+export function init(hooks = {}) {
+  const createLoaderFn = hooks.createLoader ?? createLoader;
+  const createSlotRefreshFn = hooks.createSlotRefresh ?? createSlotRefresh;
+  const setIntervalFn = hooks.setInterval ?? setInterval;
+  const initEstimatorFn = hooks.initEstimator ?? initEstimator;
+
+  wireToggleGroup('.tab-btn', (btn) => {
+    state.activeTab = btn.dataset.tab;
+    renderChart();
+    renderInsights();
   });
 
-  const refresh = createSlotRefresh({
+  wireToggleGroup('#chartTypeToggle .toggle-btn', (btn) => {
+    state.chartType = btn.dataset.value;
+    renderChart();
+  });
+
+  wireToggleGroup('#resolutionToggle .toggle-btn', (btn) => {
+    state.resolution = btn.dataset.value;
+    renderChart();
+  });
+
+  initEstimatorFn();
+
+  const loader = createLoaderFn(buildLoaderDeps());
+  const refresh = createSlotRefreshFn({
     slotMs: SLOT_MS,
     load: loader.load,
   });
-  setInterval(() => refresh.poll(), 60000);
+  setIntervalFn(() => refresh.poll(), SLOT_REFRESH_MS);
 
   loader.load();
 }
