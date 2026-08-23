@@ -1,10 +1,9 @@
-// Tests fetchSahkotinPrices' success path and its `data.prices ?? []` fallback
-// (audit #3965). The existing error-message test only covers the !ok branch
-// (a thrown error); this covers a 200 response: a well-formed payload's `prices`
-// array is returned verbatim, the request is built correctly (endpoint +
-// URL-encoded range, follow redirects, timeout), and a payload missing `prices`
-// (or with prices: null) degrades to [] instead of leaking undefined to callers
-// — backfillPrices reads [] as "no more history" and stops cleanly.
+// Tests fetchSahkotinPrices' 200 success path (audit #3965). The existing
+// error-message test only covers the !ok branch (a thrown error); this covers a
+// 200 response: the request is built correctly (endpoint + URL-encoded range,
+// follow redirects, timeout), and a payload missing `prices` (or with
+// prices: null) degrades to [] instead of leaking undefined to callers —
+// backfillPrices reads [] as "no more history" and stops cleanly.
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { fetchSahkotinPrices } from './sahkotin.js';
 import { stubFetch as stubOkFetch } from '../test-support/fetch-stub.js';
