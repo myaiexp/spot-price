@@ -20,9 +20,10 @@ type PriceRow = typeof prices.$inferSelect;
 
 /**
  * Convert a raw Drizzle row (with string numerics) to a PriceSlot, or null when a
- * numeric column fails to parse or the datetime is not a finite instant.
+ * numeric column is not finite or the datetime is not a finite instant.
  * node-postgres returns NUMERIC columns as strings; a NULL or malformed value
- * makes parseFloat return NaN, which JSON-serialises to null and would silently
+ * makes parseFloat return NaN, and a stored 'Infinity'/-Infinity parses to a
+ * non-finite number. JSON.stringify emits null for both, which would silently
  * corrupt the response. An unparseable timestamp makes toISOString throw
  * RangeError and would 500 the whole /today, /range, or /now response. Either
  * kind of row is unusable for charting/cost, so it is dropped (see mapSlots).
@@ -30,7 +31,7 @@ type PriceRow = typeof prices.$inferSelect;
 function rowToPriceSlot(row: PriceRow): PriceSlot | null {
   const priceNoTax = parseFloat(row.priceNoTax);
   const priceWithTax = parseFloat(row.priceWithTax);
-  if (Number.isNaN(priceNoTax) || Number.isNaN(priceWithTax)) {
+  if (!Number.isFinite(priceNoTax) || !Number.isFinite(priceWithTax)) {
     return null;
   }
   const instant = new Date(row.datetime);
@@ -46,8 +47,8 @@ function rowToPriceSlot(row: PriceRow): PriceSlot | null {
 
 /**
  * Map raw rows to PriceSlots, dropping any row that fails numeric conversion or
- * whose datetime is not a finite instant so no NaN (or a thrown RangeError)
- * reaches the response. Well-formed rows pass through unchanged.
+ * whose datetime is not a finite instant so no NaN/Infinity (or a thrown
+ * RangeError) reaches the response. Well-formed rows pass through unchanged.
  */
 function mapSlots(rows: PriceRow[]): PriceSlot[] {
   return rows.flatMap((row) => {

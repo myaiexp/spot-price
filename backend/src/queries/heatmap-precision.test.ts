@@ -2,7 +2,8 @@
 // AVG(price_with_tax::float) to AVG(price_with_tax) (audit #3913). The query now
 // returns each NUMERIC average as a full-precision string (node-postgres yields
 // NUMERIC as a string); getHeatmap must parse it to a number at the boundary,
-// round to exact cents/kWh, and never let a malformed value reach the grid as NaN.
+// round to exact cents/kWh, and never let a malformed/NaN/Infinity value reach
+// the grid (JSON.stringify would emit null for both).
 import { describe, it, expect } from 'vitest';
 import { createHeatmap } from './heatmap.js';
 import type { Db } from '../db/connection.js';
@@ -50,6 +51,39 @@ describe('heatmap NUMERIC aggregate handling (audit #3913)', () => {
     expect(result.matrix[0].hours[1]).toBeNull(); // malformed → skipped → null, not NaN
     expect(result.minPrice).toBe(10);
     expect(result.maxPrice).toBe(10);
+  });
+
+  it('skips ±Infinity avg_price so min/max stay JSON-numbers (finding #7902)', async () => {
+    // parseFloat('Infinity') is Infinity, not NaN. An isNaN-only skip lets it
+    // into the grid; Math.max then yields Infinity and JSON.stringify emits
+    // `"maxPrice":null` — the same silent corruption as a NaN cell. Dropping
+    // the cell keeps the sibling hour and a finite min/max after round-trip.
+    const getHeatmap = createHeatmap();
+    const result = await getHeatmap(
+      fakeDb([
+        { weekday: 1, hour: 0, avg_price: '0.10000' },
+        { weekday: 1, hour: 1, avg_price: 'Infinity' },
+        { weekday: 1, hour: 2, avg_price: '-Infinity' },
+      ]),
+    );
+
+    expect(result.matrix[0].hours[0]).toBe(10);
+    expect(result.matrix[0].hours[1]).toBeNull();
+    expect(result.matrix[0].hours[2]).toBeNull();
+    expect(result.minPrice).toBe(10);
+    expect(result.maxPrice).toBe(10);
+
+    const roundTripped = JSON.parse(JSON.stringify(result)) as {
+      minPrice: unknown;
+      maxPrice: unknown;
+      matrix: Array<{ hours: unknown[] }>;
+    };
+    expect(roundTripped.minPrice).toBe(10);
+    expect(roundTripped.maxPrice).toBe(10);
+    expect(typeof roundTripped.minPrice).toBe('number');
+    expect(typeof roundTripped.maxPrice).toBe('number');
+    expect(roundTripped.matrix[0].hours[1]).toBeNull();
+    expect(roundTripped.matrix[0].hours[2]).toBeNull();
   });
 
   it('keeps a 0 and a negative NUMERIC average as numeric cells in min/max (finding #7617)', async () => {

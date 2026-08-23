@@ -1,12 +1,12 @@
-// Route test: GET endpoints must not emit NaN when a NUMERIC column comes back
-// non-numeric or NULL (audit #3125), nor 500 when a datetime is unparseable
-// (finding #7134). node-postgres returns NUMERIC as a string; a NULL or
-// malformed value makes parseFloat return NaN, which JSON-serialises to null
-// and silently corrupts the response. An unparseable timestamp makes
-// toISOString throw RangeError and would fail the whole /today, /range, or
-// /now request. rowToPriceSlot returns null for either; mapSlots drops those
-// so the response carries only well-formed slots; valid rows pass through
-// unchanged.
+// Route test: GET endpoints must not emit NaN/Infinity when a NUMERIC column
+// comes back non-numeric, NULL, or 'Infinity' (audit #3125, finding #7902), nor
+// 500 when a datetime is unparseable (finding #7134). node-postgres returns
+// NUMERIC as a string; a NULL or malformed value makes parseFloat return NaN,
+// and 'Infinity' parses to Infinity — JSON-serialises to null either way and
+// silently corrupts the response. An unparseable timestamp makes toISOString
+// throw RangeError and would fail the whole /today, /range, or /now request.
+// rowToPriceSlot returns null for either; mapSlots drops those so the
+// response carries only well-formed slots; valid rows pass through unchanged.
 import { describe, it, expect } from 'vitest';
 import { createApp } from '../app.js';
 import { makeSelectDb } from '../test-support/fake-db.js';
@@ -60,6 +60,41 @@ describe('rowToPriceSlot/mapSlots numeric guard (audit #3125)', () => {
     const slots = await rangeSlots(rows);
     expect(slots).toHaveLength(2);
     for (const s of slots) {
+      expect(Number.isFinite(s.priceNoTax)).toBe(true);
+      expect(Number.isFinite(s.priceWithTax)).toBe(true);
+    }
+  });
+
+  it('drops ±Infinity NUMERIC values rather than JSON-nulling the price (finding #7902)', async () => {
+    // parseFloat('Infinity') is Infinity, which is not NaN, so an isNaN-only
+    // guard lets it through; JSON.stringify then emits null and the slot looks
+    // like a missing price. The write path already refuses Infinity; the read
+    // path must drop it the same way it drops NaN so a corrupt row cannot
+    // poison /today /range /now.
+    const rows: MalformedRow[] = [
+      good,
+      { datetime: '2026-03-10T09:00:00.000Z', priceNoTax: 'Infinity', priceWithTax: '6.275' },
+      { datetime: '2026-03-10T10:00:00.000Z', priceNoTax: '5', priceWithTax: '-Infinity' },
+      { datetime: '2026-03-10T11:00:00.000Z', priceNoTax: '7', priceWithTax: '8.785' },
+    ];
+    const app = createApp(makeSelectDb(rows));
+    const res = await app.request('/api/prices/range?from=2026-03-10&to=2026-03-10');
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    const body = JSON.parse(text) as { slots: Slot[] };
+    expect(body.slots.map((s) => s.datetime)).toEqual([
+      '2026-03-10T08:00:00.000Z',
+      '2026-03-10T11:00:00.000Z',
+    ]);
+    // JSON.stringify(Infinity) === 'null'. Checking the raw body (not the
+    // parsed object) is what catches the leak: after JSON.parse, a null price
+    // is indistinguishable from a dropped field and Number.isFinite(null)
+    // coerces to true.
+    expect(text).not.toMatch(/"priceNoTax":null/);
+    expect(text).not.toMatch(/"priceWithTax":null/);
+    for (const s of body.slots) {
+      expect(typeof s.priceNoTax).toBe('number');
+      expect(typeof s.priceWithTax).toBe('number');
       expect(Number.isFinite(s.priceNoTax)).toBe(true);
       expect(Number.isFinite(s.priceWithTax)).toBe(true);
     }

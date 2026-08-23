@@ -1,6 +1,6 @@
 # Collector and backfill
 
-`src/collector.ts` is a thin CLI entry only — compiled to `dist/collector.js` and run by the `spot-price-collector` systemd timer every 15 min. Collect/backfill logic lives in side-effect-free library modules; conversion + HTTP helpers in `src/utils/`.
+`src/collector.ts` is a thin CLI entry only — compiled to `dist/collector.js` and run by the `spot-price-collector` systemd timer every 15 min. Collect/backfill logic lives in side-effect-free library modules; conversion + HTTP helpers in `src/utils/`. `main(argv, deps)` is the testable dispatch (returns an exit code, never `process.exit`); the CLI is `isMainModule`-guarded so importing the file in vitest does not collect. Invalid `--backfill` and a missing `DATABASE_URL` both exit 1 without opening a connection.
 
 | Module | Role |
 | --- | --- |

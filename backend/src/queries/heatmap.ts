@@ -76,13 +76,14 @@ export function createHeatmap(): (db: Db) => Promise<HeatmapResponse> {
 
     // Build lookup. AVG is computed in exact NUMERIC in SQL (no lossy ::float
     // cast); node-postgres hands NUMERIC back as a string, so the conversion to
-    // a JS number happens here at the boundary. A malformed/NaN average (never
-    // expected: price_with_tax is NOT NULL and each group has ≥1 row) is skipped
-    // rather than poisoning the grid with NaN.
+    // a JS number happens here at the boundary. A malformed/NaN/Infinity average
+    // (never expected: price_with_tax is NOT NULL and each group has ≥1 row) is
+    // skipped rather than poisoning the grid — JSON.stringify(Infinity) is null
+    // and would also make minPrice/maxPrice JSON-null.
     const avgPriceByDayHour = new Map<string, number>();
     for (const row of rows.rows as Array<{ weekday: number; hour: number; avg_price: string }>) {
       const avgPrice = parseFloat(row.avg_price);
-      if (Number.isNaN(avgPrice)) continue;
+      if (!Number.isFinite(avgPrice)) continue;
       const weekday = row.weekday - 1; // ISODOW 1=Mon → 0
       avgPriceByDayHour.set(`${weekday}-${row.hour}`, avgPrice);
     }

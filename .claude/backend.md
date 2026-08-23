@@ -24,7 +24,7 @@ Per `createApp` instance — `pricesRoutes` calls `createNowQuery` / `createHeat
 
 - `/now`: Helsinki 15-min slot key, 60s TTL (null miss is a cached value, not a hole)
 - `/heatmap`: Helsinki week-start key, 15 min TTL
-- day/range: uncached; unparseable NUMERIC or datetime rows are dropped
+- day/range: uncached; non-finite NUMERIC (NaN/Infinity) or unparseable datetime rows are dropped
 
 ## Bind, CORS, errors
 
