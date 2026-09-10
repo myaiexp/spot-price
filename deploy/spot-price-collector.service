@@ -1,0 +1,12 @@
+# Tracked copy of /etc/systemd/system/spot-price-collector.service — edit here, then:
+# sudo cp deploy/spot-price-collector.service /etc/systemd/system/ && sudo systemctl daemon-reload
+[Unit]
+Description=Spot Price Collector
+After=network.target postgresql.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/mase/Projects/spot-price/backend
+ExecStart=/usr/bin/node dist/collector.js
+EnvironmentFile=/home/mase/Projects/spot-price/.env
+User=mase

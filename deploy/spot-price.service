@@ -1,0 +1,18 @@
+# Tracked copy of /etc/systemd/system/spot-price.service — edit here, then:
+# sudo cp deploy/spot-price.service /etc/systemd/system/ && sudo systemctl daemon-reload
+[Unit]
+Description=spot-price
+After=network.target
+
+[Service]
+Type=simple
+User=mase
+WorkingDirectory=/home/mase/Projects/spot-price
+ExecStart=/usr/bin/node backend/dist/index.js
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+EnvironmentFile=/home/mase/Projects/spot-price/.env
+
+[Install]
+WantedBy=multi-user.target
