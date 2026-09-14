@@ -1,8 +1,9 @@
 // Tomorrow-tab enable/fallback when data is missing.
+import { hasSlots } from './slot-time.js';
 
 // Whether the Huomenna tab can be selected: needs a non-empty tomorrow payload.
 export function hasTomorrowSlots(tomorrow) {
-  return !!(tomorrow && tomorrow.slots && tomorrow.slots.length > 0);
+  return hasSlots(tomorrow);
 }
 
 // Tomorrow-tab enablement plus the active tab to show. When tomorrow's data is

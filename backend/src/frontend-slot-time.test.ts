@@ -12,6 +12,8 @@ import {
   helsinkiDateKey,
   findSlotContaining,
   slotBoundaryMs,
+  slotsOf,
+  hasSlots,
 } from '../../frontend/js/slot-time.js';
 import { slot } from './test-support/rows.js';
 
@@ -102,5 +104,28 @@ describe('slotBoundaryMs', () => {
     // not the clamped last-slot start.
     expect(slotBoundaryMs(slots, 3)).toBe(t0 + 45 * 60 * 1000);
     expect(slotBoundaryMs(slots, 4)).toBe(t0 + 60 * 60 * 1000);
+  });
+});
+
+describe('slotsOf / hasSlots (finding #9605)', () => {
+  const slots = [slot('2026-07-18T12:00:00Z')];
+
+  it('returns the payload slots array itself', () => {
+    const day = { slots };
+    expect(slotsOf(day)).toBe(slots);
+    expect(hasSlots(day)).toBe(true);
+  });
+
+  it('treats a null / undefined payload (404 tomorrow, failed yesterday) as no slots', () => {
+    expect(slotsOf(null)).toEqual([]);
+    expect(slotsOf(undefined)).toEqual([]);
+    expect(hasSlots(null)).toBe(false);
+    expect(hasSlots(undefined)).toBe(false);
+  });
+
+  it('treats a payload without slots the same as empty slots', () => {
+    expect(slotsOf({})).toEqual([]);
+    expect(hasSlots({})).toBe(false);
+    expect(hasSlots({ slots: [] })).toBe(false);
   });
 });

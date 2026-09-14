@@ -1,6 +1,6 @@
 // Pure cost-estimator logic: slot assembly, deadline parse, window search.
 
-import { SLOT_MS, helsinkiMinutesOfDay, helsinkiDateKey } from './slot-time.js';
+import { SLOT_MS, helsinkiMinutesOfDay, helsinkiDateKey, slotsOf } from './slot-time.js';
 import { windowSums, argMin, argMax } from './calc.js';
 
 // Drop slots whose window has already ended at nowMs, so a search over the result
@@ -26,12 +26,7 @@ export function parseDeadlineMinutes(value) {
 // slot-assembly the estimator does — pulled out of the DOM module so the
 // money-facing path is unit-tested.
 export function collectEstimatorSlots(today, tomorrow, nowMs) {
-  const slots = [];
-  if (today && today.slots) slots.push(...today.slots);
-  if (tomorrow && tomorrow.slots && tomorrow.slots.length > 0) {
-    slots.push(...tomorrow.slots);
-  }
-  return futureSlots(slots, nowMs);
+  return futureSlots([...slotsOf(today), ...slotsOf(tomorrow)], nowMs);
 }
 
 // Index of the first slot starting at/after a wall-clock deadline (minutes since

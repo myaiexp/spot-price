@@ -43,11 +43,11 @@ function makeHarness({ chartThrows = false, ...overrides } = {}) {
   let cached = null;
   let cachedHeatmap = null;
   const deps = {
-    fetchAllData: async () => [TODAY, null, null, NOW],
+    fetchPriceBundle: async () => ({ today: TODAY, yesterday: null, tomorrow: null, now: NOW }),
     fetchHeatmap: async () => HEATMAP,
-    applyPayload: (payload) => {
-      calls.apply.push(payload);
-      cached = payload[0];
+    applyPriceBundle: (bundle) => {
+      calls.apply.push(bundle);
+      cached = bundle.today;
     },
     applyHeatmap: (heatmap) => {
       calls.applyHeatmap.push(heatmap);
@@ -90,7 +90,7 @@ describe('createLoader abort-supersede', () => {
   it('aborts the previous in-flight controller when a new load starts', () => {
     const signals = [];
     const { loader } = makeHarness({
-      fetchAllData: (signal) => {
+      fetchPriceBundle: (signal) => {
         signals.push(signal);
         return new Promise(() => {});
       },
@@ -106,13 +106,13 @@ describe('createLoader abort-supersede', () => {
     const first = deferred();
     let n = 0;
     const { loader, calls } = makeHarness({
-      fetchAllData: (signal) => {
+      fetchPriceBundle: (signal) => {
         n += 1;
         if (n === 1) {
           signal.addEventListener('abort', () => first.reject(abortError()));
           return first.promise;
         }
-        return Promise.resolve([TODAY, null, null, NOW]);
+        return Promise.resolve({ today: TODAY, yesterday: null, tomorrow: null, now: NOW });
       },
     });
     const p1 = loader.load();
@@ -127,21 +127,21 @@ describe('createLoader abort-supersede', () => {
     let n = 0;
     const newer = { slots: [{ datetime: 'newer' }] };
     const { loader, calls } = makeHarness({
-      fetchAllData: () => {
+      fetchPriceBundle: () => {
         n += 1;
         if (n === 1) return first.promise;
-        return Promise.resolve([newer, null, { slots: [1] }, NOW]);
+        return Promise.resolve({ today: newer, yesterday: null, tomorrow: { slots: [1] }, now: NOW });
       },
     });
     const p1 = loader.load();
     const p2 = loader.load();
     await p2;
-    expect(calls.apply[0][0]).toBe(newer);
+    expect(calls.apply[0].today).toBe(newer);
     expect(calls.renderers).toEqual(['hero', 'chart', 'insights', 'estimator']);
-    first.resolve([TODAY, null, null, NOW]);
+    first.resolve({ today: TODAY, yesterday: null, tomorrow: null, now: NOW });
     await p1;
     expect(calls.apply).toHaveLength(1);
-    expect(calls.apply[0][0]).toBe(newer);
+    expect(calls.apply[0].today).toBe(newer);
     expect(calls.renderers).toEqual(['hero', 'chart', 'insights', 'estimator']);
   });
 });
@@ -149,7 +149,7 @@ describe('createLoader abort-supersede', () => {
 describe('createLoader fetch vs render isolation', () => {
   it('calls showError on a non-abort fetch rejection with no cached data', async () => {
     const { loader, calls } = makeHarness({
-      fetchAllData: async () => {
+      fetchPriceBundle: async () => {
         throw new Error('network down');
       },
     });
@@ -172,7 +172,7 @@ describe('createLoader fetch vs render isolation', () => {
     await loader.heatmapPromise;
     expect(calls.apply).toHaveLength(1);
     expect(calls.fetchHeatmap).toBe(1);
-    deps.fetchAllData = async () => {
+    deps.fetchPriceBundle = async () => {
       throw new Error('blip');
     };
     await loader.load();
@@ -197,7 +197,7 @@ describe('createLoader fetch vs render isolation', () => {
 describe('createLoader heatmap failure', () => {
   it('calls showHeatmapError when heatmap throws after a day-data fetch failure', async () => {
     const { loader, calls } = makeHarness({
-      fetchAllData: async () => {
+      fetchPriceBundle: async () => {
         throw new Error('network down');
       },
       fetchHeatmap: async () => {
@@ -250,7 +250,7 @@ describe('createLoader heatmap failure', () => {
     const { loader, deps, calls } = makeHarness();
     await loader.load();
     await loader.heatmapPromise;
-    deps.fetchAllData = async () => {
+    deps.fetchPriceBundle = async () => {
       throw new Error('502 Bad Gateway');
     };
     deps.fetchHeatmap = async () => {

@@ -66,3 +66,15 @@ export function slotBoundaryMs(slots, idx, slotDurationMs = SLOT_MS) {
   const lastMs = Date.parse(slots[slots.length - 1].datetime);
   return lastMs + (idx - (slots.length - 1)) * slotDurationMs;
 }
+
+// A day payload's slots array, or [] when the payload (or its slots) is missing
+// — a 404'd tomorrow or a failed yesterday arrives as null. The one place the
+// `{ slots }` day shape is read; every caller goes through this or hasSlots.
+export function slotsOf(day) {
+  return day?.slots ?? [];
+}
+
+// Whether a day payload has at least one slot (null / missing / empty → false).
+export function hasSlots(day) {
+  return slotsOf(day).length > 0;
+}

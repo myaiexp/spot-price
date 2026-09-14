@@ -1,6 +1,7 @@
 // Insight cards: cheapest 2h block, next cheap moment, peak to avoid.
 import { state } from './state.js';
 import { insightCurrentIndex, insightCards } from './insights-calc.js';
+import { slotsOf } from './slot-time.js';
 
 // Card key → the `insight<Key>Value` / `insight<Key>Detail` element id pair.
 const CARD_IDS = { cheap: 'Cheap', next: 'Next', peak: 'Peak' };
@@ -10,7 +11,7 @@ export function renderInsights(deps) {
   const nowMs = deps?.nowMs ?? Date.now();
   const isToday = state.activeTab === 'today';
   const data = isToday ? state.today : state.tomorrow;
-  const slots = data && data.slots ? data.slots : [];
+  const slots = slotsOf(data);
 
   const currentIdx = insightCurrentIndex(isToday, slots, nowMs);
   const cards = insightCards(slots, currentIdx);

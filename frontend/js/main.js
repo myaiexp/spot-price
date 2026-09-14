@@ -1,19 +1,19 @@
 // Entry point: wires controls, loads data, and drives the quarter-hour refresh.
 import { state } from './state.js';
-import { fetchAllData, fetchHeatmap } from './api.js';
+import { fetchPriceBundle, fetchHeatmap } from './api.js';
 import { wireToggleGroup } from './ui.js';
 import { renderHero, showError } from './hero.js';
 import { renderChart } from './chart.js';
 import { renderInsights } from './insights.js';
 import { renderHeatmap, showHeatmapError } from './heatmap.js';
 import { updateEstimator, initEstimator } from './estimator.js';
-import { SLOT_MS } from './slot-time.js';
+import { SLOT_MS, hasSlots } from './slot-time.js';
 import { renderTomorrowTab } from './tabs.js';
 import { createLoader, createSlotRefresh } from './load.js';
 
 export const SLOT_REFRESH_MS = 60_000;
 
-function applyPayload([today, yesterday, tomorrow, now]) {
+function applyPriceBundle({ today, yesterday, tomorrow, now }) {
   state.today = today;
   state.yesterday = yesterday;
   state.tomorrow = tomorrow;
@@ -22,10 +22,7 @@ function applyPayload([today, yesterday, tomorrow, now]) {
 }
 
 export function hasCachedData() {
-  return !!(
-    (state.now && state.now.slot) ||
-    (state.today && state.today.slots && state.today.slots.length)
-  );
+  return !!state.now?.slot || hasSlots(state.today);
 }
 
 // Any successful /heatmap response (even an empty week) is last-known-good; a
@@ -49,9 +46,9 @@ export function noteStale() {
 // which chart and insights read.
 export function buildLoaderDeps() {
   return {
-    fetchAllData,
+    fetchPriceBundle,
     fetchHeatmap,
-    applyPayload,
+    applyPriceBundle,
     applyHeatmap: (heatmap) => {
       state.heatmap = heatmap;
     },

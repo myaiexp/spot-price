@@ -54,9 +54,9 @@ export function createLoader(deps) {
     loadController = controller;
     const superseded = () => controller.signal.aborted;
 
-    let payload;
+    let bundle;
     try {
-      payload = await deps.fetchAllData(controller.signal);
+      bundle = await deps.fetchPriceBundle(controller.signal);
     } catch (err) {
       if (superseded()) return;
       deps.logError?.('Failed to load data:', err);
@@ -66,10 +66,10 @@ export function createLoader(deps) {
       return;
     }
 
-    // The only supersede window is the await above: applyPayload and the
+    // The only supersede window is the await above: applyPriceBundle and the
     // renderers are synchronous and none of them calls load().
     if (superseded()) return;
-    deps.applyPayload(payload);
+    deps.applyPriceBundle(bundle);
     runRenderers();
     startHeatmap(controller);
   }

@@ -1,7 +1,7 @@
 // Pure chart series: resolution, DST-correct labels, ghost alignment, now index.
 import { emaAggregate, alignSecondaryByWallClock } from './calc.js';
 import { eurToCents, slotLabel, hourLabel } from './format.js';
-import { findSlotContaining, SLOT_MS, HOUR_MS } from './slot-time.js';
+import { findSlotContaining, slotsOf, hasSlots, SLOT_MS, HOUR_MS } from './slot-time.js';
 
 // Everything data-dependent the price chart draws, derived from UI state and the
 // current instant. Returns null when the active tab has no primary slots — the
@@ -11,13 +11,13 @@ export function chartSeries(state, nowMs) {
   const primary = isToday ? state.today : state.tomorrow;
   const secondary = isToday ? state.yesterday : state.today;
 
-  if (!primary || !primary.slots || primary.slots.length === 0) return null;
+  if (!hasSlots(primary)) return null;
 
   const isHourly = state.resolution === 'hourly';
   const isBar = state.chartType === 'bar';
 
-  let primarySlots = primary.slots;
-  let secondarySlots = secondary && secondary.slots ? secondary.slots : [];
+  let primarySlots = slotsOf(primary);
+  let secondarySlots = slotsOf(secondary);
   if (isHourly) {
     primarySlots = emaAggregate(primarySlots);
     if (secondarySlots.length > 0) secondarySlots = emaAggregate(secondarySlots);

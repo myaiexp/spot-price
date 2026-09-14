@@ -4,7 +4,7 @@
 // reject (last-known-good), and fetchHeatmap hits /prices/heatmap.
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { fetchJSON, fetchAllData, fetchHeatmap, FETCH_TIMEOUT_MS } from '../../frontend/js/api.js';
+import { fetchJSON, fetchPriceBundle, fetchHeatmap, FETCH_TIMEOUT_MS } from '../../frontend/js/api.js';
 import { stubFetch, stubFailedFetch } from './test-support/fetch-stub.js';
 
 afterEach(() => {
@@ -54,13 +54,33 @@ describe('fetchJSON', () => {
   });
 });
 
-describe('fetchAllData', () => {
+describe('fetchPriceBundle', () => {
   it('passes an abort signal to every request', async () => {
     const fetchMock = stubFetch({ slots: [] });
     const controller = new AbortController();
-    await fetchAllData(controller.signal);
+    await fetchPriceBundle(controller.signal);
     expect(callsOf(fetchMock)).toHaveLength(4);
     for (let i = 0; i < 4; i++) expect(signalOf(fetchMock, i)).toBeInstanceOf(AbortSignal);
+  });
+
+  it('returns each dataset under its own key, not by position (finding #9591)', async () => {
+    // Every endpoint answers with its own path, so a swapped key (or a return
+    // order drifting from the request order) fails here.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => ({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => ({ from: url.replace('/porssi/api', '') }),
+      })),
+    );
+    expect(await fetchPriceBundle()).toEqual({
+      today: { from: '/prices/today' },
+      yesterday: { from: '/prices/yesterday' },
+      tomorrow: { from: '/prices/tomorrow' },
+      now: { from: '/prices/now' },
+    });
   });
 
   it('degrades a failed tomorrow fetch to null instead of failing the paint', async () => {
@@ -71,7 +91,7 @@ describe('fetchAllData', () => {
         return { ok: true, status: 200, statusText: 'OK', json: async () => ({ slots: [] }) };
       }),
     );
-    const [today, , tomorrow] = await fetchAllData();
+    const { today, tomorrow } = await fetchPriceBundle();
     expect(today).toEqual({ slots: [] });
     expect(tomorrow).toBeNull();
   });
@@ -84,7 +104,7 @@ describe('fetchAllData', () => {
         return { ok: true, status: 200, statusText: 'OK', json: async () => ({ slots: [] }) };
       }),
     );
-    const [today, yesterday, , now] = await fetchAllData();
+    const { today, yesterday, now } = await fetchPriceBundle();
     expect(today).toEqual({ slots: [] });
     expect(yesterday).toBeNull();
     expect(now).toEqual({ slots: [] });
@@ -102,7 +122,7 @@ describe('fetchAllData', () => {
         return { ok: true, status: 200, statusText: 'OK', json: async () => ({ slots: [] }) };
       }),
     );
-    await expect(fetchAllData(controller.signal)).rejects.toMatchObject({ name: 'AbortError' });
+    await expect(fetchPriceBundle(controller.signal)).rejects.toMatchObject({ name: 'AbortError' });
   });
 
   it('does not swallow a caller-aborted yesterday fetch into a resolved null', async () => {
@@ -117,7 +137,7 @@ describe('fetchAllData', () => {
         return { ok: true, status: 200, statusText: 'OK', json: async () => ({ slots: [] }) };
       }),
     );
-    await expect(fetchAllData(controller.signal)).rejects.toMatchObject({ name: 'AbortError' });
+    await expect(fetchPriceBundle(controller.signal)).rejects.toMatchObject({ name: 'AbortError' });
   });
 
   it('still degrades a timeout-aborted yesterday fetch to null', async () => {
@@ -130,7 +150,7 @@ describe('fetchAllData', () => {
         return { ok: true, status: 200, statusText: 'OK', json: async () => ({ slots: [] }) };
       }),
     );
-    const [today, yesterday] = await fetchAllData(new AbortController().signal);
+    const { today, yesterday } = await fetchPriceBundle(new AbortController().signal);
     expect(today).toEqual({ slots: [] });
     expect(yesterday).toBeNull();
   });
@@ -147,7 +167,7 @@ describe('fetchAllData', () => {
         return { ok: true, status: 200, statusText: 'OK', json: async () => ({ slots: [] }) };
       }),
     );
-    const [today, , tomorrow] = await fetchAllData(new AbortController().signal);
+    const { today, tomorrow } = await fetchPriceBundle(new AbortController().signal);
     expect(today).toEqual({ slots: [] });
     expect(tomorrow).toBeNull();
   });
@@ -160,7 +180,7 @@ describe('fetchAllData', () => {
         return { ok: true, status: 200, statusText: 'OK', json: async () => ({ slots: [] }) };
       }),
     );
-    await expect(fetchAllData()).rejects.toThrow('network down');
+    await expect(fetchPriceBundle()).rejects.toThrow('network down');
   });
 
   it('rejects when /prices/now throws so last-known-good is kept (finding #7614)', async () => {
@@ -171,7 +191,7 @@ describe('fetchAllData', () => {
         return { ok: true, status: 200, statusText: 'OK', json: async () => ({ slots: [] }) };
       }),
     );
-    await expect(fetchAllData()).rejects.toThrow('network down');
+    await expect(fetchPriceBundle()).rejects.toThrow('network down');
   });
 });
 

@@ -39,14 +39,17 @@ function optionalJson(path, signal) {
   });
 }
 
-// The four day/now datasets the initial paint needs, fetched together.
-export function fetchAllData(signal) {
-  return Promise.all([
+// The day/now price bundle one dashboard paint needs, fetched in parallel and
+// returned keyed by dataset so no caller depends on a positional order. The
+// heatmap is not part of it — see fetchHeatmap.
+export async function fetchPriceBundle(signal) {
+  const [today, yesterday, tomorrow, now] = await Promise.all([
     fetchJSON('/prices/today', signal),
     optionalJson('/prices/yesterday', signal),
     optionalJson('/prices/tomorrow', signal),
     fetchJSON('/prices/now', signal),
   ]);
+  return { today, yesterday, tomorrow, now };
 }
 
 // The heatmap is loaded separately — it's slow on a cold start.
