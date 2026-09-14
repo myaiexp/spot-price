@@ -28,7 +28,7 @@ Per `createApp` instance — `pricesRoutes` calls `createNowQuery` / `createHeat
 
 ## Bind, CORS, errors
 
-- Listen `127.0.0.1` (`API_PORT` default 3600); nginx fronts `/porssi/api`. `DATABASE_URL` required.
+- Listen `127.0.0.1` (`API_PORT` default 3600); nginx fronts `/porssi/api` (`location /porssi/api/` → `http://127.0.0.1:3600/api/`, committed in `deploy/nginx-porssi.conf`). `DATABASE_URL` required.
 - CORS origin `https://mase.fi` in production (+ `http://localhost:5173` otherwise). `allowHeaders` is the static list `['Content-Type']` — never reflect `Access-Control-Request-Headers` (hono ReDoS).
 - `onError` always JSON `{ error: 'Internal Server Error' }` 500, never the raw exception.
 - pg pool connect 5s / query 10s so a stalled DB 500s before the frontend's 15s fetch timeout.

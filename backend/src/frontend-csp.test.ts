@@ -52,7 +52,17 @@ describe('frontend/js/main.js auto-boot (finding #7954)', () => {
 
 describe('deploy/nginx-porssi.conf (finding #7954)', () => {
   const conf = read('deploy/nginx-porssi.conf');
-  const staticBlock = conf.split(/location \/porssi\s*\{/)[1] ?? '';
+  // A block's body runs to its first column-0 closing brace, so the static
+  // block's assertions can't be satisfied by headers in the API block.
+  const blockAfter = (opener: RegExp) => (conf.split(opener)[1] ?? '').split(/^\}/m)[0];
+  const staticBlock = blockAfter(/location \/porssi\s*\{/);
+  const apiBlock = blockAfter(/location \/porssi\/api\/\s*\{/);
+
+  it('proxies /porssi/api/ to the backend with the /porssi prefix stripped (finding #9954)', () => {
+    expect(apiBlock).toMatch(/proxy_pass\s+http:\/\/127\.0\.0\.1:3600\/api\/;/);
+    expect(apiBlock).not.toMatch(/try_files/);
+    expect(staticBlock).not.toMatch(/proxy_pass/);
+  });
 
   it('re-lists framing/nosniff/HSTS and sets a porssi-scoped CSP', () => {
     expect(staticBlock).toMatch(/add_header\s+Strict-Transport-Security\s+"max-age=31536000; includeSubDomains"/);
