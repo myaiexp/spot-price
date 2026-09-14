@@ -11,6 +11,7 @@ import { SLOT_MS } from '../../frontend/js/slot-time.js';
 import {
   buildLoaderDeps,
   hasCachedData,
+  hasCachedHeatmap,
   init,
   noteStale,
   SLOT_REFRESH_MS,
@@ -114,6 +115,7 @@ describe('buildLoaderDeps (finding #7619)', () => {
   it('passes hasCachedData, noteStale, and a tomorrowTab renderer', () => {
     const deps = buildLoaderDeps();
     expect(deps.hasCachedData).toBe(hasCachedData);
+    expect(deps.hasCachedHeatmap).toBe(hasCachedHeatmap);
     expect(deps.noteStale).toBe(noteStale);
     expect(deps.renderers.map((r: { name: string }) => r.name)).toEqual([
       'tomorrowTab',
@@ -133,6 +135,15 @@ describe('buildLoaderDeps (finding #7619)', () => {
     expect(hasCachedData()).toBe(true);
     state.today = { slots: [] };
     expect(hasCachedData()).toBe(false);
+  });
+
+  it('hasCachedHeatmap follows applyHeatmap: any response cached, a failure cleared', () => {
+    const deps = buildLoaderDeps();
+    expect(hasCachedHeatmap()).toBe(false);
+    deps.applyHeatmap({ matrix: [], minPrice: 0, maxPrice: 0, weekNumber: 38 });
+    expect(hasCachedHeatmap()).toBe(true);
+    deps.applyHeatmap(null);
+    expect(hasCachedHeatmap()).toBe(false);
   });
 
   it('noteStale sets refreshFailed even if renderHero has no DOM', () => {
@@ -172,6 +183,7 @@ describe('init production wiring (finding #7619)', () => {
     stubDocument();
     const { deps, load } = initWithCapture();
     expect(deps?.hasCachedData).toBe(hasCachedData);
+    expect(deps?.hasCachedHeatmap).toBe(hasCachedHeatmap);
     expect(deps?.noteStale).toBe(noteStale);
     expect(deps?.renderers.map((r: { name: string }) => r.name)).toContain('tomorrowTab');
     expect(load).toHaveBeenCalledOnce();

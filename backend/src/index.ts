@@ -1,7 +1,11 @@
-import 'dotenv/config';
+// API server entry: loads the project .env, serves the Hono app, drains on exit.
+import { config } from 'dotenv';
+import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 import { serve } from '@hono/node-server';
 import { createApp } from './app.js';
 import { createDb, closeDb } from './db/connection.js';
+import { projectEnvPath } from './utils/project-env.js';
 
 export function main(): void {
   const databaseUrl = process.env.DATABASE_URL;
@@ -47,13 +51,12 @@ export function main(): void {
 
 // Server entry point: run directly with `node dist/index.js` (prod) or
 // `tsx src/index.ts` (dev). Guarded so importing this module (e.g. for tests)
-// does not trigger startup side-effects.
-import { fileURLToPath } from 'node:url';
-import { resolve } from 'node:path';
-
+// does not trigger startup side-effects — including reading the project .env.
+// dotenv never overrides a var systemd's EnvironmentFile already set.
 const currentFile = fileURLToPath(import.meta.url);
 const isMainModule = process.argv[1] && resolve(process.argv[1]) === currentFile;
 
 if (isMainModule) {
+  config({ path: projectEnvPath(import.meta.url) });
   main();
 }

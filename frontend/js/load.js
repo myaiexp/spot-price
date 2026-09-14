@@ -9,7 +9,8 @@ export const LOAD_FAILED_MESSAGE =
 // wrote. Fetch failures stay in the fetch catch; each renderer runs in its own
 // try so a missing Chart.js global cannot abort insights/estimator or masquerade
 // as a network error. A refresh blip while cached data exists keeps the last
-// known-good display instead of wiping the hero for up to 15 minutes.
+// known-good display instead of wiping the hero — or the heatmap grid — for up
+// to 15 minutes (a deploy restart answering 502 is the routine trigger).
 export function createLoader(deps) {
   let loadController = null;
   let heatmapPromise = Promise.resolve();
@@ -30,6 +31,8 @@ export function createLoader(deps) {
       .catch((err) => {
         if (superseded()) return;
         deps.logError?.('Failed to load heatmap:', err);
+        // Warm failure: the grid already on screen is last-known-good — leave it.
+        if (deps.hasCachedHeatmap?.()) return;
         deps.applyHeatmap(null);
         deps.showHeatmapError();
       });
@@ -63,11 +66,11 @@ export function createLoader(deps) {
       return;
     }
 
+    // The only supersede window is the await above: applyPayload and the
+    // renderers are synchronous and none of them calls load().
     if (superseded()) return;
     deps.applyPayload(payload);
-    if (superseded()) return;
     runRenderers();
-    if (superseded()) return;
     startHeatmap(controller);
   }
 

@@ -3,8 +3,7 @@
 // that decides which one runs and with which walkBackFrom. Importing
 // collector.ts must not itself collect — main() is the testable entry.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { fileURLToPath } from 'node:url';
-import { main, collectorEnvPath } from './collector.js';
+import { main } from './collector.js';
 import type { Db } from './db/connection.js';
 import { getHelsinkiDateRange } from './utils/helsinki-time.js';
 
@@ -85,22 +84,5 @@ describe('collector CLI main (finding #7904)', () => {
     expect(deps.createDb).not.toHaveBeenCalled();
     expect(deps.collectPrices).not.toHaveBeenCalled();
     expect(deps.backfillPrices).not.toHaveBeenCalled();
-  });
-});
-
-describe('collectorEnvPath (finding #7935)', () => {
-  it('resolves the project-root .env from src/ and dist/, not backend/.env', () => {
-    // Both the documented `cd backend && npm run backfill` and the collector
-    // unit's WorkingDirectory are backend/, where backend/.env does not exist.
-    // dotenv must follow the file (src/ or dist/), not cwd.
-    expect(collectorEnvPath('file:///repo/backend/src/collector.ts')).toBe(
-      '/repo/.env',
-    );
-    expect(collectorEnvPath('file:///repo/backend/dist/collector.js')).toBe(
-      '/repo/.env',
-    );
-    expect(collectorEnvPath()).toBe(
-      fileURLToPath(new URL('../../.env', import.meta.url)),
-    );
   });
 });

@@ -42,6 +42,12 @@ export function hasCachedData() {
   );
 }
 
+// Any successful /heatmap response (even an empty week) is last-known-good; a
+// failed fetch leaves null, so the next failure still shows the error.
+export function hasCachedHeatmap() {
+  return state.heatmap != null;
+}
+
 export function noteStale() {
   state.refreshFailed = true;
   try {
@@ -72,6 +78,7 @@ export function buildLoaderDeps() {
     showError,
     showHeatmapError,
     hasCachedData,
+    hasCachedHeatmap,
     noteStale,
     logError: (...args) => console.error(...args),
   };

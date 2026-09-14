@@ -15,15 +15,7 @@ import { createDb } from './db/connection.js';
 import { collectPrices } from './collectors/spot-hinta.js';
 import { backfillPrices } from './collectors/sahkotin.js';
 import { parseBackfillArg } from './collectors/backfill-arg.js';
-
-/**
- * Project-root `.env` path from this file's location — `src/` or compiled `dist/`.
- * `config()` with no path reads cwd/.env; both `npm run backfill` and the collector
- * unit run with cwd=backend/, and backend/.env does not exist (finding #7935).
- */
-export function collectorEnvPath(fromFile: string = import.meta.url): string {
-  return fileURLToPath(new URL('../../.env', fromFile));
-}
+import { projectEnvPath } from './utils/project-env.js';
 
 /** Optional seams so tests can drive dispatch without a real DB or network. */
 export interface CollectorMainDeps {
@@ -89,6 +81,6 @@ const currentFile = fileURLToPath(import.meta.url);
 const isMainModule = process.argv[1] && resolve(process.argv[1]) === currentFile;
 
 if (isMainModule) {
-  config({ path: collectorEnvPath() });
+  config({ path: projectEnvPath(import.meta.url) });
   process.exit(await main());
 }

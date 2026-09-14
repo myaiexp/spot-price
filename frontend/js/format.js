@@ -32,8 +32,8 @@ function hhmm(hour, minute) {
   return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
 }
 
-// Helsinki HH:MM label for a slot's own datetime (colon form, for chart/insight
-// axes) — DST-correct because it reads the slot's real wall-clock time.
+// Helsinki HH:MM label for a slot's own datetime (colon form, for the chart's
+// 15-min axis) — DST-correct because it reads the slot's real wall-clock time.
 export function slotLabel(datetime) {
   const { hour, minute } = helsinkiHourMinute(datetime);
   return hhmm(hour, minute);

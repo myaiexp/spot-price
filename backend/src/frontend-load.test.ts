@@ -1,10 +1,10 @@
 // Tests for the dashboard load orchestrator (../../frontend/js/load.js).
 // Abort-supersede must not paint an error over a newer load, a superseded
 // resolve must not overwrite state, render exceptions stay isolated from fetch
-// failures, heatmap rejections call showHeatmapError, a day-data fetch failure
-// still starts the heatmap, and a refresh blip keeps last-known-good data
-// instead of wiping the hero (findings #7136, #7109, #7108, #7102, #7101,
-// #7621).
+// failures, a cold heatmap rejection calls showHeatmapError, a day-data fetch
+// failure still starts the heatmap, and a refresh blip keeps last-known-good
+// data instead of wiping the hero or the heatmap grid (findings #7136, #7109,
+// #7108, #7102, #7101, #7621, #9580, #9930).
 
 import { describe, it, expect } from 'vitest';
 import { createLoader, createSlotRefresh } from '../../frontend/js/load.js';
@@ -41,6 +41,7 @@ function makeHarness({ chartThrows = false, ...overrides } = {}) {
     logError: [],
   };
   let cached = null;
+  let cachedHeatmap = null;
   const deps = {
     fetchAllData: async () => [TODAY, null, null, NOW],
     fetchHeatmap: async () => HEATMAP,
@@ -50,6 +51,7 @@ function makeHarness({ chartThrows = false, ...overrides } = {}) {
     },
     applyHeatmap: (heatmap) => {
       calls.applyHeatmap.push(heatmap);
+      cachedHeatmap = heatmap;
     },
     renderers: [
       { name: 'hero', run: () => calls.renderers.push('hero') },
@@ -69,6 +71,7 @@ function makeHarness({ chartThrows = false, ...overrides } = {}) {
     showError: (msg) => calls.showError.push(msg),
     showHeatmapError: () => calls.showHeatmapError.push(true),
     hasCachedData: () => !!cached,
+    hasCachedHeatmap: () => cachedHeatmap != null,
     noteStale: () => {
       calls.noteStale += 1;
     },
@@ -210,7 +213,7 @@ describe('createLoader heatmap failure', () => {
     expect(calls.applyHeatmap).toEqual([null]);
   });
 
-  it('calls showHeatmapError on heatmap rejection, not renderHeatmap', async () => {
+  it('calls showHeatmapError on a cold heatmap rejection, not renderHeatmap', async () => {
     const { loader, calls } = makeHarness({
       fetchHeatmap: async () => {
         throw new Error('heatmap down');
@@ -221,6 +224,44 @@ describe('createLoader heatmap failure', () => {
     expect(calls.showHeatmapError).toEqual([true]);
     expect(calls.renderHeatmap).toBe(0);
     expect(calls.applyHeatmap).toEqual([null]);
+    // Nothing was cached, so a second cold failure still shows the error.
+    await loader.load();
+    await loader.heatmapPromise;
+    expect(calls.showHeatmapError).toEqual([true, true]);
+  });
+
+  it('keeps the last-known-good grid on a warm heatmap refresh failure', async () => {
+    const { loader, deps, calls } = makeHarness();
+    await loader.load();
+    await loader.heatmapPromise;
+    expect(calls.renderHeatmap).toBe(1);
+    deps.fetchHeatmap = async () => {
+      throw new Error('502 Bad Gateway');
+    };
+    await loader.load();
+    await loader.heatmapPromise;
+    expect(calls.applyHeatmap).toEqual([HEATMAP]);
+    expect(calls.showHeatmapError).toEqual([]);
+    expect(calls.renderHeatmap).toBe(1);
+    expect(calls.logError.some((args) => String(args[0]).includes('heatmap'))).toBe(true);
+  });
+
+  it('keeps both hero and grid when a deploy restart fails the whole refresh', async () => {
+    const { loader, deps, calls } = makeHarness();
+    await loader.load();
+    await loader.heatmapPromise;
+    deps.fetchAllData = async () => {
+      throw new Error('502 Bad Gateway');
+    };
+    deps.fetchHeatmap = async () => {
+      throw new Error('502 Bad Gateway');
+    };
+    await loader.load();
+    await loader.heatmapPromise;
+    expect(calls.showError).toEqual([]);
+    expect(calls.noteStale).toBe(1);
+    expect(calls.applyHeatmap).toEqual([HEATMAP]);
+    expect(calls.showHeatmapError).toEqual([]);
   });
 
   it('does not treat a renderHeatmap throw as a heatmap load failure', async () => {
@@ -257,6 +298,30 @@ describe('createLoader heatmap failure', () => {
     expect(calls.showHeatmapError).toEqual([]);
     expect(calls.renderHeatmap).toBe(1);
     expect(calls.applyHeatmap).toEqual([HEATMAP]);
+  });
+
+  it('does not apply or render a superseded heatmap that resolves after a newer one', async () => {
+    // A slow first heatmap that ignores abort and resolves late must not
+    // overwrite the newer grid (mirrors the day-data superseded-resolve test).
+    const heatA = deferred();
+    const HEATMAP_A = { matrix: [[1]], minPrice: 1, maxPrice: 1 };
+    const HEATMAP_B = { matrix: [[2]], minPrice: 2, maxPrice: 2 };
+    let n = 0;
+    const { loader, calls } = makeHarness({
+      fetchHeatmap: () => {
+        n += 1;
+        return n === 1 ? heatA.promise : Promise.resolve(HEATMAP_B);
+      },
+    });
+    await loader.load();
+    const heatmapA = loader.heatmapPromise;
+    await loader.load();
+    await loader.heatmapPromise;
+    expect(calls.applyHeatmap).toEqual([HEATMAP_B]);
+    heatA.resolve(HEATMAP_A);
+    await heatmapA;
+    expect(calls.applyHeatmap).toEqual([HEATMAP_B]);
+    expect(calls.renderHeatmap).toBe(1);
   });
 });
 

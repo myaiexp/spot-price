@@ -29,7 +29,7 @@ cd backend && npm run build && npm run backfill                          # full 
 cd backend && npm run build && npm run collect -- --backfill=2024-01-01  # resume
 ```
 
-Those commands set cwd to `backend/` (the collector unit's `WorkingDirectory` is the same). The CLI loads the project-root `.env` by path from this file (`src/` or `dist/` → `../../.env`), not `cwd/.env` — `backend/.env` does not exist. systemd `EnvironmentFile` injects that same file before start; dotenv does not override an already-set `DATABASE_URL`.
+Those commands set cwd to `backend/` (the collector unit's `WorkingDirectory` is the same). The CLI loads the project-root `.env` by path from its entry file via `utils/project-env.ts` (`src/` or `dist/` → `../../.env`, shared with the API's `index.ts`), not `cwd/.env` — `backend/.env` does not exist. systemd `EnvironmentFile` injects that same file before start; dotenv does not override an already-set `DATABASE_URL`.
 
 The default exclusive upper bound is Helsinki local midnight of the current Helsinki day — live spot-hinta owns Helsinki today. `--backfill=YYYY-MM-DD` maps to `walkBackFrom` at Helsinki midnight of that day (not UTC midnight — that would be 02:00/03:00 Helsinki and walk into the named day's first hours). A full ISO instant is kept as-is. The walk moves *backwards* from that exclusive upper bound.
 
