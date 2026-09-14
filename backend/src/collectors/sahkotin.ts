@@ -1,11 +1,13 @@
-// Historical hourly backfill from sahkotin.fi (EUR/MWh → EUR/kWh × VAT).
-import { FETCH_TIMEOUT_MS, httpErrorDetail } from '../utils/http.js';
+// Historical hourly backfill from sahkotin.fi (EUR/MWh → EUR/kWh × dated VAT).
+import { fetchUpstreamJson } from '../utils/http.js';
 import { mwhToKwh, applyVat } from '../utils/price-conversion.js';
 import { getHelsinkiToday, getHelsinkiDateRange } from '../utils/helsinki-time.js';
+import { filterValidSlots } from './slot-filter.js';
 import { upsertPrices, makePriceInsert } from './upsert.js';
 import type { Db } from '../db/connection.js';
 
 const SAHKOTIN_PRICES_URL = 'https://sahkotin.fi/prices';
+const SAHKOTIN_SOURCE = 'sahkotin.fi';
 
 /**
  * Pause between consecutive sahkotin.fi backfill requests. This is a courtesy
@@ -69,32 +71,19 @@ function isSahkotinSlot(slot: unknown): slot is SahkotinSlot {
 
 export async function fetchSahkotinPrices(start: string, end: string): Promise<SahkotinSlot[]> {
   const url = `${SAHKOTIN_PRICES_URL}?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
-  const response = await fetch(url, {
-    redirect: 'follow',
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-  });
-
-  if (!response.ok) {
-    throw new Error(`sahkotin.fi API error: ${httpErrorDetail(response)}`);
-  }
-
-  const raw: unknown = await response.json();
+  const raw = await fetchUpstreamJson(url, SAHKOTIN_SOURCE);
   if (typeof raw !== 'object' || raw === null) return [];
   const data = raw as Record<string, unknown>;
   if (!Array.isArray(data.prices)) return [];
 
   const prices = data.prices as unknown[];
-  const valid = prices.filter(isSahkotinSlot);
-  const skipped = prices.length - valid.length;
-  if (skipped > 0) {
-    console.warn(`Skipped ${skipped} slot(s) with invalid fields from sahkotin.fi`);
-  }
+  const valid = filterValidSlots(prices, isSahkotinSlot, SAHKOTIN_SOURCE);
   // A non-empty prices array that filters to nothing is malformed upstream
   // data, not end of history. Returning [] here would make backfillPrices
   // stop the walk and silently truncate everything older than this chunk.
   if (prices.length > 0 && valid.length === 0) {
     throw new Error(
-      `sahkotin.fi returned ${prices.length} price slot(s) but no valid slots — ` +
+      `${SAHKOTIN_SOURCE} returned ${prices.length} price slot(s) but no valid slots — ` +
         `aborting rather than treating this as end of history`,
     );
   }
@@ -164,7 +153,8 @@ export async function backfillPrices(
 
     const values = slots.map((slot) => {
       const noTax = mwhToKwh(slot.value);
-      const withTax = applyVat(noTax);
+      // The rate in force on the slot's own date — history spans 23%/24%/10%/25.5%.
+      const withTax = applyVat(noTax, new Date(slot.date));
       return makePriceInsert(slot.date, noTax, withTax);
     });
 

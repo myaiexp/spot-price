@@ -1,9 +1,11 @@
 // Live 15-min spot price collection from spot-hinta.fi (TodayAndDayForward).
-import { FETCH_TIMEOUT_MS, httpErrorDetail } from '../utils/http.js';
+import { fetchUpstreamJson } from '../utils/http.js';
+import { filterValidSlots } from './slot-filter.js';
 import { upsertPrices, makePriceInsert } from './upsert.js';
 import type { Db } from '../db/connection.js';
 
 const SPOT_HINTA_TODAY_URL = 'https://api.spot-hinta.fi/TodayAndDayForward';
+const SPOT_HINTA_SOURCE = 'spot-hinta.fi';
 
 interface SpotHintaSlot {
   Rank: number;
@@ -33,27 +35,13 @@ function isValidSpotHintaSlot(slot: unknown): slot is SpotHintaSlot {
 }
 
 export async function collectPrices(db: Db): Promise<{ upserted: number }> {
-  const response = await fetch(SPOT_HINTA_TODAY_URL, {
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-  });
-
-  if (!response.ok) {
-    throw new Error(`spot-hinta.fi API error: ${httpErrorDetail(response)}`);
-  }
-
-  const raw: unknown = await response.json();
+  const raw = await fetchUpstreamJson(SPOT_HINTA_TODAY_URL, SPOT_HINTA_SOURCE);
 
   if (!Array.isArray(raw) || raw.length === 0) {
     return { upserted: 0 };
   }
 
-  // Drop any slot that fails runtime validation so malformed upstream data can't
-  // poison the batch. Logs the count so upstream data quality issues stay visible.
-  const validSlots = raw.filter(isValidSpotHintaSlot);
-  const skipped = raw.length - validSlots.length;
-  if (skipped > 0) {
-    console.warn(`Skipped ${skipped} slot(s) with invalid fields from spot-hinta.fi`);
-  }
+  const validSlots = filterValidSlots(raw, isValidSpotHintaSlot, SPOT_HINTA_SOURCE);
 
   if (validSlots.length === 0) {
     return { upserted: 0 };

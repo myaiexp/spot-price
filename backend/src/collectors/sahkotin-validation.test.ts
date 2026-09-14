@@ -1,7 +1,6 @@
 // Tests sahkotin slot filtering and all-invalid abort (finding #7131, #7116).
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { fetchSahkotinPrices, backfillPrices } from './sahkotin.js';
-import { mwhToKwh, applyVat } from '../utils/price-conversion.js';
 import { makeCapturingInsertDb as capturingDb, makeCountingInsertDb as countingDb } from '../test-support/fake-db.js';
 import { stubFetch, okJson } from '../test-support/fetch-stub.js';
 
@@ -153,7 +152,7 @@ describe('backfillPrices malformed chunks (finding #7131, finding #7116)', () =>
   });
 });
 
-describe('backfillPrices write-path conversion (finding #7132)', () => {
+describe('backfillPrices write-path conversion (finding #7132, finding #9575)', () => {
   it('upserts MWh→kWh × VAT values canonicalized to 5 decimals', async () => {
     const mwh = 50;
     const fetchMock = vi.fn()
@@ -165,16 +164,44 @@ describe('backfillPrices write-path conversion (finding #7132)', () => {
 
     await backfillPrices(db, { maxChunks: 1000, requestDelayMs: 0 });
 
-    const noTax = mwhToKwh(mwh);
-    const withTax = applyVat(noTax);
+    // 2024-01-01 is in the 24% period: 50 €/MWh → 0.05 €/kWh → 0.062 with VAT.
     expect(captured.rows).toEqual([
       {
         datetime: goodSlot(0, mwh).date,
-        priceNoTax: noTax.toFixed(5),
-        priceWithTax: withTax.toFixed(5),
+        priceNoTax: '0.05000',
+        priceWithTax: '0.06200',
       },
     ]);
     // Guard the conversion itself: EUR/MWh must not land in the EUR/kWh columns.
     expect(captured.rows[0]).not.toMatchObject({ priceNoTax: mwh.toFixed(5) });
+  });
+
+  it("taxes each slot at its own date's VAT rate, not today's (finding #9575)", async () => {
+    // Literal expected strings, not re-derived through applyVat, so a wrong
+    // rate table cannot pass by agreeing with itself.
+    const slots = [
+      { date: '2025-01-15T10:00:00Z', value: 100 }, // 25.5%
+      { date: '2023-01-15T10:00:00Z', value: 100 }, // temporary 10%
+      { date: '2018-06-15T10:00:00Z', value: 100 }, // 24%
+      { date: '2024-08-31T22:00:00Z', value: 100 }, // 01:00 Helsinki 1 Sep 2024 → 25.5%
+      { date: '2012-12-31T21:00:00Z', value: 100 }, // 23:00 Helsinki 31 Dec 2012 → 23%
+    ];
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(okJson({ prices: slots }))
+      .mockResolvedValueOnce(okJson({ prices: [] }));
+    vi.stubGlobal('fetch', fetchMock);
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const { db, captured } = capturingDb();
+
+    await backfillPrices(db, { maxChunks: 1000, requestDelayMs: 0 });
+
+    const rows = captured.rows as Array<{ datetime: string; priceNoTax: string; priceWithTax: string }>;
+    expect(rows.map((r) => [r.datetime, r.priceNoTax, r.priceWithTax])).toEqual([
+      ['2025-01-15T10:00:00Z', '0.10000', '0.12550'],
+      ['2023-01-15T10:00:00Z', '0.10000', '0.11000'],
+      ['2018-06-15T10:00:00Z', '0.10000', '0.12400'],
+      ['2024-08-31T22:00:00Z', '0.10000', '0.12550'],
+      ['2012-12-31T21:00:00Z', '0.10000', '0.12300'],
+    ]);
   });
 });

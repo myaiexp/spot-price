@@ -1,4 +1,4 @@
-// Shared HTTP helpers for upstream price-API calls: fetch timeout + safe error formatting.
+// Shared helpers for upstream price-API calls: timed JSON fetch + safe error formatting.
 
 /**
  * Abort an upstream price-API request after this many ms. The payloads are small
@@ -40,4 +40,28 @@ export function sanitizeStatusText(statusText: string): string {
 export function httpErrorDetail(response: Response): string {
   const detail = sanitizeStatusText(response.statusText);
   return detail ? `${response.status} ${detail}` : String(response.status);
+}
+
+/**
+ * GET an upstream price API and return its parsed JSON body as `unknown` —
+ * callers own shape validation. Every collector fetches through here so the
+ * timeout, redirect policy and error wording are defined once:
+ *   - AbortSignal.timeout(FETCH_TIMEOUT_MS) bounds a hung upstream;
+ *   - redirect 'follow' is fetch's default, stated so a policy change is a
+ *     visible edit (the sahkotin.fi backfill was written against a redirecting
+ *     endpoint);
+ *   - a non-2xx response throws `<sourceName> API error: <status> <text>` with
+ *     the statusText sanitized by httpErrorDetail.
+ */
+export async function fetchUpstreamJson(url: string, sourceName: string): Promise<unknown> {
+  const response = await fetch(url, {
+    redirect: 'follow',
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+
+  if (!response.ok) {
+    throw new Error(`${sourceName} API error: ${httpErrorDetail(response)}`);
+  }
+
+  return response.json();
 }
