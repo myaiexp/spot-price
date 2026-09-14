@@ -18,12 +18,14 @@ Pure math is side-effect-free and DOM-free. Render modules own the DOM. `main.js
 | `js/insights-calc.js` | Now-index per tab + the three card texts |
 | `js/tab-state.js` | Huomenna enable/fallback to Tänään when tomorrow data is gone |
 | `js/heatmap-calc.js` | Green→amber→red price-to-color scale |
+| `js/chart-series.js` | `chartSeries(state, nowMs)`: resolution/EMA, colon labels, wall-clock ghost, now index (null on empty primary) |
+| `js/chart-config.js` | `buildChartConfig(series, reducedMotion)`: static styling constants + datasets, tick stride, `Nyt` annotation; fresh option objects per call |
 
 **Render / glue**
 
 | File | Role |
 | --- | --- |
-| `js/chart.js` | Area/bar × 15min/hourly Chart.js (optional `{ document, nowMs, Chart, matchMedia }` for tests) |
+| `js/chart.js` | DOM seam: placeholder, `chartSeries` → `buildChartConfig`, destroy previous Chart.js instance then construct (optional `{ document, nowMs, Chart, matchMedia }` for tests) |
 | `js/insights.js` | Cheapest 2h / next cheap / peak cards (optional `{ document, nowMs }` for tests) |
 | `js/heatmap.js` | Weekly heatmap (optional `{ document }` for tests) |
 | `js/estimator.js` | Cost estimator ("Ajoitusavustin"; optional `{ document, nowMs }` for tests) |

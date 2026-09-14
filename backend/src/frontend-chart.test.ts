@@ -30,26 +30,33 @@ function chartDoc() {
   return { doc: fakeDocument(els), els };
 }
 
-type ChartCall = { canvas: unknown; config: Record<string, unknown> };
+type FakeChartInstance = { destroyed: number; destroy: () => void };
+type ChartCall = { canvas: unknown; config: Record<string, unknown>; instance: FakeChartInstance };
 
 function fakeChart() {
   const constructed: ChartCall[] = [];
-  function Chart(this: { destroy: () => void }, canvas: unknown, config: Record<string, unknown>) {
-    constructed.push({ canvas, config });
-    this.destroy = () => {};
+  function Chart(this: FakeChartInstance, canvas: unknown, config: Record<string, unknown>) {
+    constructed.push({ canvas, config, instance: this });
+    this.destroyed = 0;
+    this.destroy = () => {
+      this.destroyed += 1;
+    };
   }
   return { Chart, constructed };
 }
 
-function render(doc: ReturnType<typeof fakeDocument>, extra: Record<string, unknown> = {}) {
-  const { Chart, constructed } = fakeChart();
+function render(
+  doc: ReturnType<typeof fakeDocument>,
+  extra: Record<string, unknown> = {},
+  chart = fakeChart(),
+) {
   renderChart({
     document: doc,
-    Chart,
+    Chart: chart.Chart,
     matchMedia: () => ({ matches: false }),
     ...extra,
   });
-  return constructed;
+  return chart.constructed;
 }
 
 function annotationOf(config: Record<string, unknown>) {
@@ -126,6 +133,54 @@ describe('renderChart now marker (finding #7897, #7615)', () => {
     const constructed = render(doc, { nowMs: NOW_AT_20 });
 
     expect(annotationOf(constructed[0].config).nowLine).toBeUndefined();
+  });
+});
+
+describe('renderChart re-render and mode (finding #9928)', () => {
+  it('destroys the previous Chart instance before constructing the next', () => {
+    state.today = { slots: TWO_HOURS };
+    const { doc, els } = chartDoc();
+    const chart = fakeChart();
+    render(doc, {}, chart);
+    const first = chart.constructed[0].instance;
+    expect(state.chart).toBe(first);
+    expect(first.destroyed).toBe(0);
+
+    state.resolution = 'hourly';
+    render(doc, {}, chart);
+
+    expect(chart.constructed).toHaveLength(2);
+    expect(first.destroyed).toBe(1);
+    expect(state.chart).toBe(chart.constructed[1].instance);
+    expect(chart.constructed[1].instance.destroyed).toBe(0);
+    expect(chart.constructed[1].canvas).toBe(els.priceChart);
+  });
+
+  it('bar mode builds a bar chart with the ghost kept as a line overlay', () => {
+    state.today = { slots: TWO_HOURS };
+    state.yesterday = { slots: TWO_HOURS };
+    state.chartType = 'bar';
+    const { doc } = chartDoc();
+    const constructed = render(doc);
+
+    const { config } = constructed[0];
+    expect(config.type).toBe('bar');
+    const [primary, ghost] = datasetsOf(config) as { fill?: boolean; type?: string }[];
+    expect(primary.fill).toBe(false);
+    expect(ghost.type).toBe('line');
+  });
+
+  it('passes colon-form Helsinki labels, two 03:00 buckets on the fall-back hourly day', () => {
+    // 2026-10-25: Helsinki 04:00 EEST → 03:00 EET, a 25h / 100-slot day.
+    state.today = { slots: stepSlots('2026-10-24T21:00:00Z', Array(100).fill(0.1)) };
+    state.resolution = 'hourly';
+    const { doc } = chartDoc();
+    const constructed = render(doc);
+
+    const labels = (constructed[0].config.data as { labels: string[] }).labels;
+    expect(labels).toHaveLength(25);
+    expect(labels.slice(2, 6)).toEqual(['02:00', '03:00', '03:00', '04:00']);
+    expect(labels.every((l) => /^\d{2}:\d{2}$/.test(l))).toBe(true);
   });
 });
 
