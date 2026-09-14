@@ -12,6 +12,7 @@ import {
   parseDeadlineMinutes,
   collectEstimatorSlots,
 } from '../../frontend/js/estimator-calc.js';
+import { SLOT_MS } from '../../frontend/js/slot-time.js';
 import { slot, stepSlots } from './test-support/rows.js';
 
 // Summer (EEST, UTC+3) slot at a Helsinki wall-clock time — deterministic, no DST
@@ -31,6 +32,18 @@ describe('futureSlots', () => {
     const kept = futureSlots(slots, now);
     expect(kept).toHaveLength(3);
     expect(kept[0]).toBe(slots[1]);
+  });
+
+  it('drops a slot at exactly its exclusive window end (finding #9933)', () => {
+    // [start, end): at nowMs === start + SLOT_MS slot 0 has finished. Keeping it
+    // (a `>=` flip) would let the estimator recommend a window already over.
+    const slots = quarterSlots([1, 2, 3, 4]);
+    const now = Date.parse(slots[0].datetime) + SLOT_MS;
+    const kept = futureSlots(slots, now);
+    expect(kept).toHaveLength(3);
+    expect(kept[0]).toBe(slots[1]);
+    // One ms earlier slot 0 is still running and stays.
+    expect(futureSlots(slots, now - 1)[0]).toBe(slots[0]);
   });
 });
 
@@ -80,6 +93,17 @@ describe('findDeadlineSlotIndex', () => {
   it('returns null when the deadline lands past the last slot', () => {
     const short = [eest(18, 22, 0), eest(18, 23, 0), eest(19, 0, 0), eest(19, 5, 0)];
     expect(findDeadlineSlotIndex(short, 7 * 60)).toBeNull(); // rolls to tomorrow, none ≥ 07:00
+  });
+  it('bounds a same-day deadline past the last same-day start at tomorrow’s first slot (finding #9574)', () => {
+    // 23:59 today: no today slot starts ≥ 23:59, and tomorrow 00:00 is the first
+    // slot at/after the deadline instant — searching past it would use tomorrow.
+    expect(findDeadlineSlotIndex(twoDays, 23 * 60 + 59)).toBe(24);
+    expect(findDeadlineSlotIndex(twoDays, 23 * 60 + 30)).toBe(24); // 23:30 → 00:00
+    expect(findDeadlineSlotIndex(twoDays, 23 * 60)).toBe(23); // exact start still wins
+  });
+  it('returns null for a same-day deadline past the last slot when tomorrow is absent', () => {
+    const todayOnly = twoDays.slice(0, 24);
+    expect(findDeadlineSlotIndex(todayOnly, 23 * 60 + 59)).toBeNull();
   });
 });
 
@@ -183,6 +207,35 @@ describe('findOptimalWindow', () => {
     expect(day).toHaveLength(96);
     const r = findOptimalWindow(day, 1, 1, 23 * 60 + 59)!;
     expect(r.best).toMatchObject({ startIndex: 92, endExclusive: 96 });
+  });
+
+  it('keeps a 23:59 deadline inside today once tomorrow’s prices are loaded (finding #9574)', () => {
+    // Today 20:00–23:45 at 10 c, tomorrow from 00:00 at 1 c. Tomorrow is
+    // cheaper, so a search that ran past today's end would pick it.
+    const today = stepSlots('2026-07-17T17:00:00.000Z', Array(16).fill(10));
+    const tomorrow = stepSlots('2026-07-17T21:00:00.000Z', Array(16).fill(1));
+    const slots = [...today, ...tomorrow];
+    const tomorrowStart = today.length;
+
+    const r = findOptimalWindow(slots, 1, 1, 23 * 60 + 59)!;
+    expect(r.best.endExclusive).toBeLessThanOrEqual(tomorrowStart);
+    expect(r.worst.endExclusive).toBeLessThanOrEqual(tomorrowStart);
+    expect(r.best.cost).toBeCloseTo(10, 6); // (4×10)×0.25 — no 1 c tomorrow slot
+
+    // Same answer as the 23:45 deadline, which already stayed in today.
+    const at2345 = findOptimalWindow(slots, 1, 1, 23 * 60 + 45)!;
+    expect(at2345.best.endExclusive).toBeLessThanOrEqual(tomorrowStart);
+  });
+
+  it('keeps a same-day deadline inside a 23h spring-forward day', () => {
+    // 2026-03-29 Helsinki is 23h (03:00 → 04:00). Day runs 22:00Z..21:00Z (92
+    // slots); the next Helsinki day starts at index 92.
+    const day = stepSlots('2026-03-28T22:00:00.000Z', Array(92).fill(10));
+    const next = stepSlots('2026-03-29T21:00:00.000Z', Array(8).fill(1));
+    const slots = [...day, ...next];
+    expect(findDeadlineSlotIndex(slots, 23 * 60 + 59)).toBe(92);
+    const r = findOptimalWindow(slots, 1, 1, 23 * 60 + 59)!;
+    expect(r.best.endExclusive).toBeLessThanOrEqual(92);
   });
 
   it('searches tonight for a rolled 07:00 deadline, and only then falls through (finding #7111)', () => {

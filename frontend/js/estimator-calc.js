@@ -34,12 +34,16 @@ export function collectEstimatorSlots(today, tomorrow, nowMs) {
   return futureSlots(slots, nowMs);
 }
 
-// Index of the first slot at/after a wall-clock deadline (minutes since Helsinki
-// midnight), as the charging window's exclusive upper bound. The deadline is the
-// *next* occurrence of that time of day: one already at/before slots[0]'s
-// time-of-day rolls to the following Helsinki day. Assumes slots span at most two
-// Helsinki days (today + tomorrow), which collectEstimatorSlots guarantees. Returns
-// null when the deadline lands past the last slot.
+// Index of the first slot starting at/after a wall-clock deadline (minutes since
+// Helsinki midnight), as the charging window's exclusive upper bound. The deadline
+// is the *next* occurrence of that time of day: one already at/before slots[0]'s
+// time-of-day rolls to the following Helsinki day. A same-day deadline later than
+// that day's last slot start (23:59 vs a 23:45 last slot) resolves to the next
+// day's first slot, which starts after the deadline instant — without that the
+// search would run into tomorrow's prices whenever they are loaded (finding
+// #9574). Assumes slots span at most two Helsinki days (today + tomorrow), which
+// collectEstimatorSlots guarantees. Returns null when no slot starts at/after the
+// deadline.
 export function findDeadlineSlotIndex(slots, deadlineMin) {
   if (!slots || slots.length === 0) return null;
   const firstMin = helsinkiMinutesOfDay(slots[0].datetime);
@@ -48,6 +52,9 @@ export function findDeadlineSlotIndex(slots, deadlineMin) {
 
   for (let i = 0; i < slots.length; i++) {
     const isNextDay = helsinkiDateKey(slots[i].datetime) !== firstDay;
+    // Same-day deadline: every earlier same-day slot started before it, so the
+    // day boundary is the bound.
+    if (isNextDay && !rollsToNextDay) return i;
     if (isNextDay !== rollsToNextDay) continue;
     if (helsinkiMinutesOfDay(slots[i].datetime) >= deadlineMin) return i;
   }
@@ -67,9 +74,9 @@ export function isDeadlineDayUnavailable(slots, deadlineMin) {
 }
 
 // Cheapest and most expensive contiguous windows of `durationHours` within the
-// deadline (if any). A deadline with no matching slot (past last start, or
-// rolled onto a day with no data) searches through slots.length — remaining
-// slots still start before it (finding #7111). endExclusive on the result is
+// deadline (if any). A deadline with no matching slot (past today's last start
+// with tomorrow unpublished, or rolled onto a day with no data) searches through
+// slots.length — remaining slots still start before it (finding #7111). endExclusive on the result is
 // the exclusive window-end slot index (start + window length), the same bound
 // convention calc.js uses — the view resolves it through slotSpanLabel, so a
 // window abutting the data end still shows its true end instant.

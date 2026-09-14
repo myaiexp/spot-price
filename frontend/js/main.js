@@ -8,24 +8,10 @@ import { renderInsights } from './insights.js';
 import { renderHeatmap, showHeatmapError } from './heatmap.js';
 import { updateEstimator, initEstimator } from './estimator.js';
 import { SLOT_MS } from './slot-time.js';
-import { tomorrowTabDecision } from './tab-state.js';
+import { renderTomorrowTab } from './tabs.js';
 import { createLoader, createSlotRefresh } from './load.js';
 
 export const SLOT_REFRESH_MS = 60_000;
-
-function syncTomorrowTab() {
-  const decision = tomorrowTabDecision(state.tomorrow, state.activeTab);
-  const btn = document.getElementById('tabTomorrow');
-  if (!btn) return;
-  btn.disabled = !decision.enabled;
-  btn.title = decision.enabled ? '' : 'Huomisen hintoja ei vielä saatavilla';
-  if (decision.activeTab !== state.activeTab) {
-    state.activeTab = decision.activeTab;
-    document.querySelectorAll('.tab-btn').forEach((b) => {
-      b.classList.toggle('active', b.dataset.tab === decision.activeTab);
-    });
-  }
-}
 
 function applyPayload([today, yesterday, tomorrow, now]) {
   state.today = today;
@@ -58,7 +44,9 @@ export function noteStale() {
 }
 
 // Production loader wiring. Extracted so tests can pin hasCachedData / noteStale
-// / the tomorrowTab renderer without booting the whole dashboard (finding #7619).
+// / the renderer list without booting the whole dashboard (finding #7619).
+// tomorrowTab must stay first: its fallback to Tänään rewrites state.activeTab,
+// which chart and insights read.
 export function buildLoaderDeps() {
   return {
     fetchAllData,
@@ -68,7 +56,7 @@ export function buildLoaderDeps() {
       state.heatmap = heatmap;
     },
     renderers: [
-      { name: 'tomorrowTab', run: syncTomorrowTab },
+      { name: 'tomorrowTab', run: renderTomorrowTab },
       { name: 'hero', run: renderHero },
       { name: 'chart', run: renderChart },
       { name: 'insights', run: renderInsights },
@@ -100,12 +88,12 @@ export function init(hooks = {}) {
 
   wireToggleGroup('#chartTypeToggle .toggle-btn', (btn) => {
     state.chartType = btn.dataset.value;
-    renderChart();
+    renderChartFn();
   });
 
   wireToggleGroup('#resolutionToggle .toggle-btn', (btn) => {
     state.resolution = btn.dataset.value;
-    renderChart();
+    renderChartFn();
   });
 
   initEstimatorFn();

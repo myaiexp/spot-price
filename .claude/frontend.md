@@ -30,11 +30,12 @@ Pure math is side-effect-free and DOM-free. Render modules own the DOM. `main.js
 | `js/heatmap.js` | Weekly heatmap (optional `{ document }` for tests) |
 | `js/estimator.js` | Cost estimator ("Ajoitusavustin"; optional `{ document, nowMs }` for tests) |
 | `js/hero.js` | Current-price headline (optional `{ document }` for tests) |
-| `js/main.js` | `init()`: wires controls and hands `buildLoaderDeps()` (incl. `hasCachedData` / `noteStale` / `tomorrowTab`) into `createLoader`; `SLOT_REFRESH_MS` is 60s. Auto-calls `init()` unless Vitest imported the module (`process.env.VITEST`) so index.html needs no inline script |
+| `js/tabs.js` | `renderTomorrowTab`: applies `tab-state.js` to the Huomenna button (disabled + title, fallback to Tänään via `setActive`; optional `{ document }` for tests). Runs first in the renderer list so chart/insights read the fallen-back tab |
+| `js/main.js` | `init()`: wires controls (every toggle reaches `renderChart` / `renderInsights` through the same `hooks` seam) and hands `buildLoaderDeps()` (incl. `hasCachedData` / `noteStale` / the `tomorrowTab` renderer) into `createLoader`; `SLOT_REFRESH_MS` is 60s. Auto-calls `init()` unless Vitest imported the module (`process.env.VITEST`) so index.html needs no inline script |
 | `js/api.js` | Same-origin `/porssi/api` fetches |
 | `js/load.js` | Abort-supersede load orchestration, isolated renders, last-known-good on refresh blip |
 | `js/state.js` | Shared mutable UI state (`today`/`yesterday`/`tomorrow`/`now`, active tab, heatmap, chart type/resolution, Chart.js instance, `refreshFailed`) |
-| `js/ui.js` | Generic exclusive toggle-group wiring (click moves `.active`, then `onSelect`; disabled buttons no-op, checked at click time) |
+| `js/ui.js` | Exclusive toggle groups: `setActive(buttons, predicate)` is the one `.active` rewrite; `wireToggleGroup` (click moves `.active` via `setActive`, then `onSelect`; disabled buttons no-op, checked at click time) |
 
 ## Slot indices
 
@@ -42,7 +43,7 @@ All slot indices and labels derive from each slot's `datetime` — never fixed `
 
 Window-span labels go through `slotSpanLabel` (colon form). `formatTime` is the fi-FI prose form (`14.30`) for copy like the hero's "klo" note — don't mix the two; estimator and insight cards share the colon helper so they cannot drift.
 
-Estimator deadlines are minutes-since-Helsinki-midnight (`parseDeadlineMinutes` on the `<input type="time">` value), matching `helsinkiMinutesOfDay` — not a fractional hour.
+Estimator deadlines are minutes-since-Helsinki-midnight (`parseDeadlineMinutes` on the `<input type="time">` value), matching `helsinkiMinutesOfDay` — not a fractional hour. `findDeadlineSlotIndex` is the first slot starting at/after the deadline *instant*: a same-day deadline past the day's last start (23:59) bounds the search at tomorrow's first slot, so loaded tomorrow prices never leak into a "today" window.
 
 ## Fetch abort / supersede
 

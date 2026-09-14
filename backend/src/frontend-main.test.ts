@@ -2,8 +2,10 @@
 // createLoader's last-known-good path is optional, so load tests that inject
 // hasCachedData themselves cannot catch init() omitting it. These pin the
 // production deps object, that a disabled Huomenna click does not switch tabs
-// (finding #7619), and that an enabled click re-renders insights + chart
-// (finding #7898).
+// (finding #7619), that an enabled click re-renders insights + chart
+// (finding #7898), and that the chart-type / resolution toggles reach the same
+// injected renderChart (finding #9587). The tomorrowTab renderer's DOM
+// behaviour lives in frontend-tabs.test.ts.
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { state } from '../../frontend/js/state.js';
@@ -16,6 +18,7 @@ import {
   noteStale,
   SLOT_REFRESH_MS,
 } from '../../frontend/js/main.js';
+import { renderTomorrowTab } from '../../frontend/js/tabs.js';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -80,12 +83,15 @@ function button({
 function stubDocument({
   tabs = [],
   byId = {},
+  groups = {},
 }: {
   tabs?: ReturnType<typeof button>[];
   byId?: Record<string, ReturnType<typeof button> | null>;
+  groups?: Record<string, ReturnType<typeof button>[]>;
 } = {}) {
   vi.stubGlobal('document', {
-    querySelectorAll: (selector: string) => (selector === '.tab-btn' ? tabs : []),
+    querySelectorAll: (selector: string) =>
+      selector === '.tab-btn' ? tabs : (groups[selector] ?? []),
     getElementById: (id: string) => byId[id] ?? null,
   });
 }
@@ -152,29 +158,11 @@ describe('buildLoaderDeps (finding #7619)', () => {
     expect(state.refreshFailed).toBe(true);
   });
 
-  it('tomorrowTab renderer disables Huomenna and falls back at midnight', () => {
-    const today = button({ active: false, dataset: { tab: 'today' } });
-    const tomorrow = button({
-      active: true,
-      dataset: { tab: 'tomorrow' },
-      id: 'tabTomorrow',
-    });
-    stubDocument({
-      tabs: [today, tomorrow],
-      byId: { tabTomorrow: tomorrow },
-    });
-    state.activeTab = 'tomorrow';
-    state.tomorrow = null;
-
+  it('wires tomorrowTab to tabs.js renderTomorrowTab (finding #9607)', () => {
     const renderer = buildLoaderDeps().renderers.find(
       (r: { name: string }) => r.name === 'tomorrowTab',
     );
-    renderer.run();
-
-    expect(state.activeTab).toBe('today');
-    expect(tomorrow.disabled).toBe(true);
-    expect(today.classList.contains('active')).toBe(true);
-    expect(tomorrow.classList.contains('active')).toBe(false);
+    expect(renderer?.run).toBe(renderTomorrowTab);
   });
 });
 
@@ -242,5 +230,28 @@ describe('init production wiring (finding #7619)', () => {
     expect(today.classList.contains('active')).toBe(false);
     expect(renderInsights).toHaveBeenCalledOnce();
     expect(renderChart).toHaveBeenCalledOnce();
+  });
+
+  it('chart type and resolution toggles call the injected renderChart (finding #9587)', () => {
+    // A handler calling the bare import would reach the real Chart.js path
+    // (no #priceChart in the stub) and never touch this spy.
+    const bar = button({ dataset: { value: 'bar' } });
+    const hourly = button({ dataset: { value: 'hourly' } });
+    stubDocument({
+      groups: {
+        '#chartTypeToggle .toggle-btn': [bar],
+        '#resolutionToggle .toggle-btn': [hourly],
+      },
+    });
+    const renderChart = vi.fn();
+    initWithCapture({ renderChart, renderInsights: vi.fn() });
+
+    bar.click();
+    expect(state.chartType).toBe('bar');
+    expect(renderChart).toHaveBeenCalledTimes(1);
+
+    hourly.click();
+    expect(state.resolution).toBe('hourly');
+    expect(renderChart).toHaveBeenCalledTimes(2);
   });
 });

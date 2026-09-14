@@ -102,6 +102,36 @@ describe('updateEstimator success path and placeholders (finding #7899)', () => 
     expect(dearestSpan).toBeGreaterThan(cheapestSpan);
   });
 
+  it('never starts Halvin on a slot that ended exactly at now (finding #9933)', () => {
+    // now = end of 20:45–21:00 (the last cheap slot). Keeping it would make
+    // Halvin 20:45–21:45; the only live 1h window is 21:00–22:00.
+    state.today = { slots: TWO_HOURS };
+    state.tomorrow = null;
+    const { doc, els } = estimatorDoc({ power: '1', duration: '1', deadline: '' });
+
+    updateEstimator({ document: doc, nowMs: Date.parse(TWO_HOURS[4].datetime) });
+
+    const html = els.estimatorResults.innerHTML;
+    expect(html).toContain('21:00–22:00');
+    expect(html).not.toContain('20:45');
+  });
+
+  it('keeps a 23:59 Halvin inside today when tomorrow is cheaper (finding #9574)', () => {
+    // Today 20:00–23:45: dear until 23:00, cheap last hour. Tomorrow cheaper still.
+    state.today = {
+      slots: stepSlots('2026-07-17T17:00:00.000Z', [...Array(12).fill(0.4), 0.1, 0.1, 0.1, 0.1]),
+    };
+    state.tomorrow = { slots: stepSlots('2026-07-17T21:00:00.000Z', Array(8).fill(0.01)) };
+    const { doc, els } = estimatorDoc({ power: '1', duration: '1', deadline: '23:59' });
+
+    updateEstimator({ document: doc, nowMs: Date.parse('2026-07-17T17:00:00.000Z') });
+
+    const html = els.estimatorResults.innerHTML;
+    expect(html).toContain('23:00–00:00');
+    expect(html).toContain('0.10 €');
+    expect(html).not.toContain('00:00–01:00');
+  });
+
   it('asks for power and duration when the inputs are empty', () => {
     state.today = { slots: TWO_HOURS };
     const { doc, els } = estimatorDoc({ power: '', duration: '', deadline: '' });
