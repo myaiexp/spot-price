@@ -184,6 +184,27 @@ describe('renderChart re-render and mode (finding #9928)', () => {
   });
 });
 
+describe('renderChart hourly with a missing :00 slot (finding #9929)', () => {
+  it('draws the gap hour as its own bucket and puts Nyt on it', () => {
+    // Helsinki 09:00–09:45, 10:15–10:45, 11:00 (EEST): the 10:00 slot is missing.
+    const slots = stepSlots('2026-07-18T06:00:00Z', [1, 2, 3, 4, 99, 10, 20, 30, 5]).filter(
+      (_, i) => i !== 4,
+    );
+    state.today = { slots };
+    state.resolution = 'hourly';
+    const { doc } = chartDoc();
+    // 07:20Z = 10:20 Helsinki, inside the gap hour.
+    const constructed = render(doc, { nowMs: Date.parse('2026-07-18T07:20:00Z') });
+
+    const { config } = constructed[0];
+    expect((config.data as { labels: string[] }).labels).toEqual(['09:00', '10:00', '11:00']);
+    expect(datasetsOf(config)[0].data).toEqual(
+      emaAggregate(slots).map((b: { priceWithTax: number }) => eurToCents(b.priceWithTax)),
+    );
+    expect(annotationOf(config).nowLine.xMin).toBe(1);
+  });
+});
+
 describe('renderChart ghost series (finding #7897, audit #6332)', () => {
   it('aligns 15-min yesterday by wall-clock, with nulls on the spring-forward gap', () => {
     // Primary: normal 96-slot day (has 03:00–03:45). Secondary: spring-forward

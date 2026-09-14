@@ -9,7 +9,7 @@
 // new consumers (audit #5565). An exclusive end also feeds slotBoundaryMs /
 // slotBoundaryLabel directly, which is what every call site wants.
 
-import { helsinkiHourMinute, helsinkiMinutesOfDay } from './slot-time.js';
+import { helsinkiHourMinute, helsinkiMinutesOfDay, HOUR_MS } from './slot-time.js';
 
 // First index of the minimum value (ties → earliest), matching the original
 // strict-`<` scan bookkeeping.
@@ -134,26 +134,31 @@ export function findPeakBlock(slots) {
   return { startIndex: best.startIndex, endExclusive: best.endExclusive, avgPrice: sum / bestLen };
 }
 
-// EMA (α default 0.3) over each wall-clock hour. Buckets are cut at the first
-// slot and every Helsinki :00 slot rather than by fixed 4-slot slices, so a 23h
-// spring-forward day yields 23 buckets and a 25h fall-back day 25 — each labelled
-// by its own slot's real hour instead of drifting after the transition.
+// EMA (α default 0.3) over each wall-clock hour. A slot belongs to the hour at
+// its UTC hour floor: Helsinki offsets are whole hours (+2/+3), so every UTC hour
+// boundary is a Helsinki :00 boundary. Keying on that absolute hour — not on the
+// Helsinki hour number (the fall-back day has two 03:xx hours) or on seeing a :00
+// slot (a collection gap at 10:00 would merge 10:15–10:45 into 09:xx, finding
+// #9929) — yields 23 buckets on spring-forward, 25 on fall-back, and one bucket
+// per hour with any data. Each bucket is dated at its hour start, so hourLabel
+// and findSlotContaining(…, HOUR_MS) stay right even when the :00 slot is missing.
 export function emaAggregate(slots, alpha = 0.3) {
   if (!slots || slots.length === 0) return [];
   const buckets = [];
-  for (let i = 0; i < slots.length; i++) {
-    const { minute } = helsinkiHourMinute(slots[i].datetime);
-    if (i === 0 || minute === 0) buckets.push([]);
-    buckets[buckets.length - 1].push(slots[i]);
+  for (const s of slots) {
+    const hourStart = Math.floor(Date.parse(s.datetime) / HOUR_MS) * HOUR_MS;
+    const last = buckets[buckets.length - 1];
+    if (last && last.hourStart === hourStart) last.slots.push(s);
+    else buckets.push({ hourStart, slots: [s] });
   }
-  return buckets.map((hourBucket) => {
-    let ema = hourBucket[0].priceWithTax;
-    let emaNoTax = hourBucket[0].priceNoTax;
-    for (let i = 1; i < hourBucket.length; i++) {
-      ema = alpha * hourBucket[i].priceWithTax + (1 - alpha) * ema;
-      emaNoTax = alpha * hourBucket[i].priceNoTax + (1 - alpha) * emaNoTax;
+  return buckets.map(({ hourStart, slots: hourSlots }) => {
+    let ema = hourSlots[0].priceWithTax;
+    let emaNoTax = hourSlots[0].priceNoTax;
+    for (let i = 1; i < hourSlots.length; i++) {
+      ema = alpha * hourSlots[i].priceWithTax + (1 - alpha) * ema;
+      emaNoTax = alpha * hourSlots[i].priceNoTax + (1 - alpha) * emaNoTax;
     }
-    return { datetime: hourBucket[0].datetime, priceNoTax: emaNoTax, priceWithTax: ema };
+    return { datetime: new Date(hourStart).toISOString(), priceNoTax: emaNoTax, priceWithTax: ema };
   });
 }
 

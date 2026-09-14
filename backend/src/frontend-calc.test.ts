@@ -1,6 +1,6 @@
 // Tests for the frontend's pure price algorithms (../../frontend/js/calc.js):
-// window sums, cheapest block, next-cheap window, peak-block gap bridging,
-// DST-aware EMA hour bucketing (23h/25h days), and wall-clock ghost alignment.
+// window sums, cheapest block, next-cheap window, peak-block gap bridging, and
+// wall-clock ghost alignment. emaAggregate bucketing: frontend-ema.test.ts.
 
 import { describe, it, expect } from 'vitest';
 import {
@@ -90,35 +90,6 @@ describe('findPeakBlock gap bridging', () => {
   it('reports endExclusive past the last slot when the peak abuts the data end', () => {
     const r = findPeakBlock(fromPrices([1, 1, 100, 100, 100, 100]));
     expect(r).toMatchObject({ startIndex: 2, endExclusive: 6 });
-  });
-});
-
-describe('emaAggregate DST hour bucketing', () => {
-  it('produces 24 hourly buckets on a normal day', () => {
-    const day = indexSlots('2026-07-17T21:00:00Z', 96); // Helsinki 2026-07-18 00:00..
-    const hourly = emaAggregate(day);
-    expect(hourly).toHaveLength(24);
-    // First bucket is the EMA of its 4 quarter-slots (prices 0,1,2,3).
-    let ema = 0;
-    for (let i = 1; i < 4; i++) ema = 0.3 * i + 0.7 * ema;
-    expect(hourly[0].priceWithTax).toBeCloseTo(ema, 6);
-    const hours = hourly.map((h) => helsinkiHour(h.datetime));
-    expect(hours).toEqual(Array.from({ length: 24 }, (_, i) => i));
-  });
-
-  it('produces 23 buckets on the spring-forward day (skips hour 3)', () => {
-    const day = indexSlots('2026-03-28T22:00:00Z', 92); // Helsinki 2026-03-29, 23h
-    const hourly = emaAggregate(day);
-    expect(hourly).toHaveLength(23);
-    expect(hourly.map((h) => helsinkiHour(h.datetime))).not.toContain(3);
-  });
-
-  it('produces 25 buckets on the fall-back day (hour 3 twice)', () => {
-    const day = indexSlots('2026-10-24T21:00:00Z', 100); // Helsinki 2026-10-25, 25h
-    const hourly = emaAggregate(day);
-    expect(hourly).toHaveLength(25);
-    const threes = hourly.filter((h) => helsinkiHour(h.datetime) === 3);
-    expect(threes).toHaveLength(2);
   });
 });
 
@@ -281,15 +252,3 @@ describe('alignSecondaryByWallClock (audit #6332)', () => {
     expect(aligned[20]).toBe(16); // 04:00
   });
 });
-
-// Local helper: Helsinki hour of an ISO instant (mirrors slot-time, kept here so
-// the assertions don't depend on the module under a second name).
-function helsinkiHour(iso: string): number {
-  return Number(
-    new Intl.DateTimeFormat('en-GB', {
-      timeZone: 'Europe/Helsinki',
-      hour: '2-digit',
-      hourCycle: 'h23',
-    }).format(new Date(iso)),
-  );
-}

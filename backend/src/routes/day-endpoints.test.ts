@@ -4,138 +4,159 @@
 // and hide a shifted day or a dropped bound — makeWindowFilterDb records the
 // window and returns only rows inside it, so /today and /yesterday cannot
 // silently share a fixture.
-import { describe, it, expect } from 'vitest';
+//
+// The clock is frozen at 00:30 Helsinki, while UTC is still on the previous
+// calendar date, and every expected date and window is a literal (finding
+// #9934). Deriving them from getHelsinkiToday() — the helper the handlers call
+// — made the test its own oracle: a handler taking "today" from
+// toISOString().slice(0, 10) agrees with Helsinki for most of the day and passed.
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createApp } from '../app.js';
-import { getHelsinkiToday, getHelsinkiDateRange, shiftDate } from '../utils/helsinki-time.js';
-import { makeWindowFilterDb } from '../test-support/window-db.js';
+import { makeWindowFilterDb, type QueryWindow } from '../test-support/window-db.js';
 import { row, type RawRow, type Slot } from '../test-support/rows.js';
 
 type DayBody = { slots: Slot[]; date: string };
 
-function expectedWindow(date: string) {
-  const { start, end } = getHelsinkiDateRange(date);
-  return { gte: start.toISOString(), lt: end.toISOString() };
+type Day = { date: string; window: QueryWindow };
+
+interface Clock {
+  label: string;
+  now: string;
+  today: Day;
+  yesterday: Day;
+  tomorrow: Day;
 }
 
-function startIso(date: string): string {
-  return getHelsinkiDateRange(date).start.toISOString();
+const CLOCKS: Clock[] = [
+  {
+    // 22:30Z = 00:30 EET (+2) on 01-16; UTC is still 01-15.
+    label: 'winter 22:30Z (EET +2)',
+    now: '2026-01-15T22:30:00.000Z',
+    today: {
+      date: '2026-01-16',
+      window: { gte: '2026-01-15T22:00:00.000Z', lt: '2026-01-16T22:00:00.000Z' },
+    },
+    yesterday: {
+      date: '2026-01-15',
+      window: { gte: '2026-01-14T22:00:00.000Z', lt: '2026-01-15T22:00:00.000Z' },
+    },
+    tomorrow: {
+      date: '2026-01-17',
+      window: { gte: '2026-01-16T22:00:00.000Z', lt: '2026-01-17T22:00:00.000Z' },
+    },
+  },
+  {
+    // 21:30Z = 00:30 EEST (+3) on 06-15; UTC is still 06-14.
+    label: 'summer 21:30Z (EEST +3)',
+    now: '2026-06-14T21:30:00.000Z',
+    today: {
+      date: '2026-06-15',
+      window: { gte: '2026-06-14T21:00:00.000Z', lt: '2026-06-15T21:00:00.000Z' },
+    },
+    yesterday: {
+      date: '2026-06-14',
+      window: { gte: '2026-06-13T21:00:00.000Z', lt: '2026-06-14T21:00:00.000Z' },
+    },
+    tomorrow: {
+      date: '2026-06-16',
+      window: { gte: '2026-06-15T21:00:00.000Z', lt: '2026-06-16T21:00:00.000Z' },
+    },
+  },
+];
+
+const QUARTER_MS = 15 * 60 * 1000;
+
+function plus(iso: string, ms: number): string {
+  return new Date(Date.parse(iso) + ms).toISOString();
 }
 
-function slotIso(date: string, offsetMs: number): string {
-  return new Date(getHelsinkiDateRange(date).start.getTime() + offsetMs).toISOString();
-}
-
-describe('GET /today (audit #3963)', () => {
-  it('200 with {slots, date} where date is today (Helsinki)', async () => {
-    const today = getHelsinkiToday();
-    const first = startIso(today);
-    const second = slotIso(today, 15 * 60 * 1000);
-    const rows: RawRow[] = [
-      { datetime: first, priceNoTax: '5', priceWithTax: '6.275' },
-      { datetime: second, priceNoTax: '7', priceWithTax: '8.785' },
-    ];
-    const { db, lastWindow } = makeWindowFilterDb(rows);
-    const app = createApp(db);
-    const res = await app.request('/api/prices/today');
-    expect(res.status).toBe(200);
-    expect(lastWindow()).toEqual(expectedWindow(today));
-    const body = (await res.json()) as DayBody;
-    expect(body.date).toBe(today);
-    expect(body.slots).toEqual([
-      { datetime: first, priceNoTax: 5, priceWithTax: 6.275 },
-      { datetime: second, priceNoTax: 7, priceWithTax: 8.785 },
-    ]);
+describe.each(CLOCKS)('day endpoints at $label', (clock) => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(clock.now));
   });
 
-  it('200 with an empty slots array when the day has no data', async () => {
-    const today = getHelsinkiToday();
-    const { db } = makeWindowFilterDb([]);
-    const app = createApp(db);
-    const res = await app.request('/api/prices/today');
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as DayBody;
-    expect(body.slots).toEqual([]);
-    expect(body.date).toBe(today);
-  });
-});
-
-describe('GET /yesterday (audit #3963, #7128)', () => {
-  it('200 with {slots, date} for yesterday\'s Helsinki window, not today\'s', async () => {
-    const today = getHelsinkiToday();
-    const yesterday = shiftDate(today, -1);
-    const todaySlot = startIso(today);
-    const yesterdaySlot = startIso(yesterday);
-    const { db, lastWindow } = makeWindowFilterDb([
-      row(todaySlot, 1),
-      row(yesterdaySlot, 10),
-    ]);
-    const app = createApp(db);
-    const res = await app.request('/api/prices/yesterday');
-    expect(res.status).toBe(200);
-    expect(lastWindow()).toEqual(expectedWindow(yesterday));
-    expect(lastWindow()).not.toEqual(expectedWindow(today));
-    const body = (await res.json()) as DayBody;
-    expect(body.date).toBe(yesterday);
-    expect(body.slots.map((s) => s.datetime)).toEqual([yesterdaySlot]);
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
-  it('200 with {slots: []} when yesterday has no rows (today\'s rows do not leak)', async () => {
-    const today = getHelsinkiToday();
-    const yesterday = shiftDate(today, -1);
-    const { db, lastWindow } = makeWindowFilterDb([row(startIso(today), 1)]);
-    const app = createApp(db);
-    const res = await app.request('/api/prices/yesterday');
-    expect(res.status).toBe(200);
-    expect(lastWindow()).toEqual(expectedWindow(yesterday));
-    const body = (await res.json()) as DayBody;
-    expect(body.date).toBe(yesterday);
-    expect(body.slots).toEqual([]);
-  });
-});
+  describe('GET /today (audit #3963)', () => {
+    it('200 with {slots, date} for the Helsinki date, not the UTC one', async () => {
+      const first = clock.today.window.gte;
+      const second = plus(first, QUARTER_MS);
+      const rows: RawRow[] = [
+        { datetime: first, priceNoTax: '5', priceWithTax: '6.275' },
+        { datetime: second, priceNoTax: '7', priceWithTax: '8.785' },
+      ];
+      const { db, lastWindow } = makeWindowFilterDb(rows);
+      const res = await createApp(db).request('/api/prices/today');
+      expect(res.status).toBe(200);
+      expect(lastWindow()).toEqual(clock.today.window);
+      const body = (await res.json()) as DayBody;
+      expect(body.date).toBe(clock.today.date);
+      expect(body.slots).toEqual([
+        { datetime: first, priceNoTax: 5, priceWithTax: 6.275 },
+        { datetime: second, priceNoTax: 7, priceWithTax: 8.785 },
+      ]);
+    });
 
-describe('GET /today and /yesterday query distinct windows (audit #7128)', () => {
-  it('each day-scoped GET asks for its own Helsinki [start, end)', async () => {
-    const today = getHelsinkiToday();
-    const yesterday = shiftDate(today, -1);
-    const { db, lastWindow } = makeWindowFilterDb([
-      row(startIso(today), 1),
-      row(startIso(yesterday), 10),
-    ]);
-    const app = createApp(db);
-
-    const todayRes = await app.request('/api/prices/today');
-    const todayWindow = lastWindow();
-    expect(todayRes.status).toBe(200);
-    expect(todayWindow).toEqual(expectedWindow(today));
-
-    const yesterdayRes = await app.request('/api/prices/yesterday');
-    const yesterdayWindow = lastWindow();
-    expect(yesterdayRes.status).toBe(200);
-    expect(yesterdayWindow).toEqual(expectedWindow(yesterday));
-    expect(yesterdayWindow).not.toEqual(todayWindow);
-  });
-});
-
-describe('GET /tomorrow (audit #3963)', () => {
-  it('200 with {slots, date} where date is tomorrow (Helsinki) when data exists', async () => {
-    const tomorrow = shiftDate(getHelsinkiToday(), 1);
-    const tomorrowSlot = startIso(tomorrow);
-    const { db, lastWindow } = makeWindowFilterDb([row(tomorrowSlot, 3)]);
-    const app = createApp(db);
-    const res = await app.request('/api/prices/tomorrow');
-    expect(res.status).toBe(200);
-    expect(lastWindow()).toEqual(expectedWindow(tomorrow));
-    const body = (await res.json()) as DayBody;
-    expect(body.date).toBe(tomorrow);
-    expect(body.slots.map((s) => s.datetime)).toEqual([tomorrowSlot]);
+    it('200 with an empty slots array when the day has no data', async () => {
+      const { db, lastWindow } = makeWindowFilterDb([]);
+      const res = await createApp(db).request('/api/prices/today');
+      expect(res.status).toBe(200);
+      expect(lastWindow()).toEqual(clock.today.window);
+      const body = (await res.json()) as DayBody;
+      expect(body.slots).toEqual([]);
+      expect(body.date).toBe(clock.today.date);
+    });
   });
 
-  it('404 with an {error} message when tomorrow has no data yet', async () => {
-    const { db } = makeWindowFilterDb([]);
-    const app = createApp(db);
-    const res = await app.request('/api/prices/tomorrow');
-    expect(res.status).toBe(404);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toMatch(/not yet available/i);
+  describe('GET /yesterday (audit #3963, #7128)', () => {
+    it("200 with {slots, date} for yesterday's Helsinki window, not today's", async () => {
+      const todaySlot = clock.today.window.gte;
+      const yesterdaySlot = clock.yesterday.window.gte;
+      const { db, lastWindow } = makeWindowFilterDb([row(todaySlot, 1), row(yesterdaySlot, 10)]);
+      const res = await createApp(db).request('/api/prices/yesterday');
+      expect(res.status).toBe(200);
+      expect(lastWindow()).toEqual(clock.yesterday.window);
+      const body = (await res.json()) as DayBody;
+      expect(body.date).toBe(clock.yesterday.date);
+      expect(body.slots.map((s) => s.datetime)).toEqual([yesterdaySlot]);
+    });
+
+    it("200 with {slots: []} when yesterday has no rows (today's rows do not leak)", async () => {
+      const { db, lastWindow } = makeWindowFilterDb([row(clock.today.window.gte, 1)]);
+      const res = await createApp(db).request('/api/prices/yesterday');
+      expect(res.status).toBe(200);
+      expect(lastWindow()).toEqual(clock.yesterday.window);
+      const body = (await res.json()) as DayBody;
+      expect(body.date).toBe(clock.yesterday.date);
+      expect(body.slots).toEqual([]);
+    });
+  });
+
+  describe('GET /tomorrow (audit #3963)', () => {
+    it('200 with {slots, date} for the Helsinki tomorrow when data exists', async () => {
+      const tomorrowSlot = clock.tomorrow.window.gte;
+      const { db, lastWindow } = makeWindowFilterDb([
+        row(clock.today.window.gte, 1),
+        row(tomorrowSlot, 3),
+      ]);
+      const res = await createApp(db).request('/api/prices/tomorrow');
+      expect(res.status).toBe(200);
+      expect(lastWindow()).toEqual(clock.tomorrow.window);
+      const body = (await res.json()) as DayBody;
+      expect(body.date).toBe(clock.tomorrow.date);
+      expect(body.slots.map((s) => s.datetime)).toEqual([tomorrowSlot]);
+    });
+
+    it('404 with an {error} message when tomorrow has no data yet', async () => {
+      const { db, lastWindow } = makeWindowFilterDb([row(clock.today.window.gte, 1)]);
+      const res = await createApp(db).request('/api/prices/tomorrow');
+      expect(res.status).toBe(404);
+      expect(lastWindow()).toEqual(clock.tomorrow.window);
+      const body = (await res.json()) as { error: string };
+      expect(body.error).toMatch(/not yet available/i);
+    });
   });
 });

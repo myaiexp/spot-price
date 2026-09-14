@@ -3,8 +3,9 @@
 // hasCachedData themselves cannot catch init() omitting it. These pin the
 // production deps object, that a disabled Huomenna click does not switch tabs
 // (finding #7619), that an enabled click re-renders insights + chart
-// (finding #7898), and that the chart-type / resolution toggles reach the same
-// injected renderChart (finding #9587). The tomorrowTab renderer's DOM
+// (finding #7898), that the chart-type / resolution toggles reach the same
+// injected renderChart and only it (finding #9587, finding #9927), and that
+// init() boots the estimator (finding #9927). The tomorrowTab renderer's DOM
 // behaviour lives in frontend-tabs.test.ts.
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
@@ -87,6 +88,7 @@ function stubDocument({
 }: {
   tabs?: ReturnType<typeof button>[];
   byId?: Record<string, ReturnType<typeof button> | null>;
+  // Other toggle groups by selector, e.g. '#chartTypeToggle .toggle-btn'.
   groups?: Record<string, ReturnType<typeof button>[]>;
 } = {}) {
   vi.stubGlobal('document', {
@@ -244,7 +246,8 @@ describe('init production wiring (finding #7619)', () => {
       },
     });
     const renderChart = vi.fn();
-    initWithCapture({ renderChart, renderInsights: vi.fn() });
+    const renderInsights = vi.fn();
+    initWithCapture({ renderChart, renderInsights });
 
     bar.click();
     expect(state.chartType).toBe('bar');
@@ -253,5 +256,19 @@ describe('init production wiring (finding #7619)', () => {
     hourly.click();
     expect(state.resolution).toBe('hourly');
     expect(renderChart).toHaveBeenCalledTimes(2);
+    // Chart controls change only the chart; insights follow the tab, not these.
+    expect(renderInsights).not.toHaveBeenCalled();
+  });
+});
+
+describe('init estimator boot (finding #9927)', () => {
+  it('boots the estimator exactly once', () => {
+    // initWithCapture defaults initEstimator to a no-op; without this spy,
+    // dropping initEstimatorFn() from init() left every test green while the
+    // live estimator never wired its device chips or input listeners.
+    stubDocument();
+    const initEstimator = vi.fn();
+    initWithCapture({ initEstimator });
+    expect(initEstimator).toHaveBeenCalledOnce();
   });
 });
