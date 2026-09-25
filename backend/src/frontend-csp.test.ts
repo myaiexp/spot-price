@@ -87,11 +87,11 @@ describe('deploy/nginx-porssi.conf (finding #7954)', () => {
 
     const style = directive(csp, 'style-src');
     expect(style).toContain("'self'");
-    expect(style).toContain('https://fonts.googleapis.com');
+    expect(style).not.toContain('https://');
     expect(style).not.toMatch(/unsafe-inline/);
     expect(directive(csp, 'style-src-attr')).toBe("style-src-attr 'unsafe-inline'");
 
-    expect(directive(csp, 'font-src')).toContain('https://fonts.gstatic.com');
+    expect(directive(csp, 'font-src')).toBe("font-src 'self'");
     expect(directive(csp, 'connect-src')).toContain('https://cloudflareinsights.com');
     expect(directive(csp, 'img-src')).toContain('data:');
     expect(directive(csp, 'object-src')).toBe("object-src 'none'");
