@@ -20,7 +20,7 @@ There is no `POST /api/collect` and day endpoints do not return a raw slot array
 
 ## Query caches
 
-Per `createApp` instance — `pricesRoutes` calls `createNowQuery` / `createHeatmap` so tests and successive apps never share a cache. Both use `createTimeKeyedCache` (one entry, key-equality AND TTL).
+Per `createApp` instance — `pricesRoutes` calls `createNowQuery` / `createHeatmapQuery` so tests and successive apps never share a cache. Both use `createTimeKeyedCache` (one entry, key-equality AND TTL).
 
 - `/now`: Helsinki 15-min slot key, 60s TTL (null miss is a cached value, not a hole)
 - `/heatmap`: Helsinki week-start key, 15 min TTL

@@ -77,6 +77,30 @@ describe('collector CLI main (finding #7904)', () => {
     expect(deps.backfillPrices).toHaveBeenCalledWith(fakeDb, {});
   });
 
+  // The exit code is the systemd timer's only failure signal: a collect that
+  // throws and still returns 0 would show a failed 15-minute run as success.
+  it('exits 1 when collectPrices rejects after opening the DB (finding #9935)', async () => {
+    const deps = makeDeps();
+    deps.collectPrices.mockRejectedValueOnce(new Error('upstream down'));
+    const code = await main(['node', 'collector.js'], deps);
+    expect(code).toBe(1);
+    expect(deps.createDb).toHaveBeenCalledWith('postgres://spot-price/test');
+    expect(deps.collectPrices).toHaveBeenCalledOnce();
+    expect(console.log).not.toHaveBeenCalled();
+    expect(console.error).toHaveBeenCalledWith('Operation failed:', 'upstream down');
+  });
+
+  it('exits 1 when backfillPrices rejects after opening the DB (finding #9935)', async () => {
+    const deps = makeDeps();
+    deps.backfillPrices.mockRejectedValueOnce(new Error('upstream down'));
+    const code = await main(['node', 'collector.js', '--backfill'], deps);
+    expect(code).toBe(1);
+    expect(deps.createDb).toHaveBeenCalledWith('postgres://spot-price/test');
+    expect(deps.backfillPrices).toHaveBeenCalledOnce();
+    expect(console.log).not.toHaveBeenCalled();
+    expect(console.error).toHaveBeenCalledWith('Operation failed:', 'upstream down');
+  });
+
   it('exits 1 and does not touch the DB for an invalid --backfill date', async () => {
     const deps = makeDeps();
     const code = await main(['node', 'collector.js', '--backfill=nope'], deps);

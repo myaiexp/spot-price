@@ -5,7 +5,7 @@ import type { Db } from '../db/connection.js';
 import { helsinkiWeekStart, getHelsinkiDateRange, shiftDate } from '../utils/helsinki-time.js';
 import { createTimeKeyedCache } from '../utils/time-keyed-cache.js';
 
-const HEATMAP_TTL = 15 * 60 * 1000;
+const HEATMAP_TTL_MS = 15 * 60 * 1000;
 
 /** One weekday row of the heatmap: 24 hourly cells in cents/kWh (null = no data yet). */
 export interface HeatmapDay {
@@ -27,12 +27,12 @@ export interface HeatmapResponse {
  * tests — never share cached data; a module-level cache previously leaked one
  * app's rows into the next regardless of its DB.
  */
-export function createHeatmap(): (db: Db) => Promise<HeatmapResponse> {
+export function createHeatmapQuery(): (db: Db) => Promise<HeatmapResponse> {
   // Cache keyed on the current Helsinki week: a Sunday-night entry is dropped at
   // the Monday rollover (wrong key) instead of serving last week's grid (wrong
   // week number + day labels) until the TTL expires. Key-equality + TTL guard
   // and per-closure isolation live in createTimeKeyedCache.
-  const cache = createTimeKeyedCache<HeatmapResponse>(HEATMAP_TTL);
+  const cache = createTimeKeyedCache<HeatmapResponse>(HEATMAP_TTL_MS);
 
   /**
    * Build the current week's hourly prices as a 7×24 grid (Helsinki time).

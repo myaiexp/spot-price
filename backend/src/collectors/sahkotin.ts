@@ -57,7 +57,7 @@ interface SahkotinSlot {
  * unparseable date would make Postgres reject the whole chunk insert. `value`
  * must be a finite number so NaN/Infinity cannot reach NUMERIC columns.
  */
-function isSahkotinSlot(slot: unknown): slot is SahkotinSlot {
+function isValidSahkotinSlot(slot: unknown): slot is SahkotinSlot {
   if (typeof slot !== 'object' || slot === null) return false;
   const s = slot as Record<string, unknown>;
   return (
@@ -77,7 +77,7 @@ export async function fetchSahkotinPrices(start: string, end: string): Promise<S
   if (!Array.isArray(data.prices)) return [];
 
   const prices = data.prices as unknown[];
-  const valid = filterValidSlots(prices, isSahkotinSlot, SAHKOTIN_SOURCE);
+  const valid = filterValidSlots(prices, isValidSahkotinSlot, SAHKOTIN_SOURCE);
   // A non-empty prices array that filters to nothing is malformed upstream
   // data, not end of history. Returning [] here would make backfillPrices
   // stop the walk and silently truncate everything older than this chunk.

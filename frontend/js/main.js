@@ -69,13 +69,13 @@ export function buildLoaderDeps() {
   };
 }
 
-export function init(hooks = {}) {
-  const createLoaderFn = hooks.createLoader ?? createLoader;
-  const createSlotRefreshFn = hooks.createSlotRefresh ?? createSlotRefresh;
-  const setIntervalFn = hooks.setInterval ?? setInterval;
-  const initEstimatorFn = hooks.initEstimator ?? initEstimator;
-  const renderChartFn = hooks.renderChart ?? renderChart;
-  const renderInsightsFn = hooks.renderInsights ?? renderInsights;
+export function init(deps = {}) {
+  const createLoaderFn = deps.createLoader ?? createLoader;
+  const createSlotRefreshFn = deps.createSlotRefresh ?? createSlotRefresh;
+  const setIntervalFn = deps.setInterval ?? setInterval;
+  const initEstimatorFn = deps.initEstimator ?? initEstimator;
+  const renderChartFn = deps.renderChart ?? renderChart;
+  const renderInsightsFn = deps.renderInsights ?? renderInsights;
 
   wireToggleGroup('.tab-btn', (btn) => {
     state.activeTab = btn.dataset.tab;

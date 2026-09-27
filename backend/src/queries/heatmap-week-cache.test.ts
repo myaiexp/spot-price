@@ -3,7 +3,7 @@
 // late-Sunday entry must be dropped at the Monday rollover even when the TTL has
 // not yet elapsed, or the UI shows last week's grid (wrong week number + days).
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { createHeatmap } from './heatmap.js';
+import { createHeatmapQuery } from './heatmap.js';
 import type { Db } from '../db/connection.js';
 import { makeHeatmapExecuteDb } from '../test-support/fake-db.js';
 
@@ -25,7 +25,7 @@ afterEach(() => {
 describe('heatmap cache invalidation (audit #17)', () => {
   it('serves the cached week within TTL when the Helsinki week is unchanged', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
-    const getHeatmap = createHeatmap();
+    const getHeatmap = createHeatmapQuery();
     const db = weekSeqDb([25, 99]); // 99 would only surface on a re-query
 
     vi.setSystemTime(new Date('2026-06-17T10:00:00.000Z')); // Wed, week start 2026-06-15
@@ -37,7 +37,7 @@ describe('heatmap cache invalidation (audit #17)', () => {
 
   it('invalidates on week rollover even within the TTL window', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
-    const getHeatmap = createHeatmap();
+    const getHeatmap = createHeatmapQuery();
     const db = weekSeqDb([25, 26]);
 
     // Sun 2026-06-21 23:53 Helsinki (EEST +3) — week start 2026-06-15.
@@ -51,7 +51,7 @@ describe('heatmap cache invalidation (audit #17)', () => {
 
   it('invalidates after the TTL elapses within the same week', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
-    const getHeatmap = createHeatmap();
+    const getHeatmap = createHeatmapQuery();
     const db = weekSeqDb([25, 26]);
 
     vi.setSystemTime(new Date('2026-06-17T10:00:00.000Z'));

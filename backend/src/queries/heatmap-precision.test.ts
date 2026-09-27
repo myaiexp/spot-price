@@ -5,7 +5,7 @@
 // round to exact cents/kWh, and never let a malformed/NaN/Infinity value reach
 // the grid (JSON.stringify would emit null for both).
 import { describe, it, expect } from 'vitest';
-import { createHeatmap } from './heatmap.js';
+import { createHeatmapQuery } from './heatmap.js';
 import type { Db } from '../db/connection.js';
 import { makeHeatmapExecuteDb, type HeatmapCell } from '../test-support/fake-db.js';
 
@@ -17,7 +17,7 @@ function fakeDb(cells: HeatmapCell[]): Db {
 
 describe('heatmap NUMERIC aggregate handling (audit #3913)', () => {
   it('parses NUMERIC string averages and rounds to exact cents/kWh', async () => {
-    const getHeatmap = createHeatmap();
+    const getHeatmap = createHeatmapQuery();
     const result = await getHeatmap(
       fakeDb([
         // ISODOW 1 = Mon → matrix day 0
@@ -39,7 +39,7 @@ describe('heatmap NUMERIC aggregate handling (audit #3913)', () => {
   });
 
   it('skips a malformed avg_price instead of emitting NaN', async () => {
-    const getHeatmap = createHeatmap();
+    const getHeatmap = createHeatmapQuery();
     const result = await getHeatmap(
       fakeDb([
         { weekday: 1, hour: 0, avg_price: '0.10000' },
@@ -58,7 +58,7 @@ describe('heatmap NUMERIC aggregate handling (audit #3913)', () => {
     // into the grid; Math.max then yields Infinity and JSON.stringify emits
     // `"maxPrice":null` — the same silent corruption as a NaN cell. Dropping
     // the cell keeps the sibling hour and a finite min/max after round-trip.
-    const getHeatmap = createHeatmap();
+    const getHeatmap = createHeatmapQuery();
     const result = await getHeatmap(
       fakeDb([
         { weekday: 1, hour: 0, avg_price: '0.10000' },
@@ -90,7 +90,7 @@ describe('heatmap NUMERIC aggregate handling (audit #3913)', () => {
     // heatmap.js greys only null/undefined; 0 is a real Nord Pool hour. Treating
     // avg_price <= 0 as missing would leave min/max as the remaining positive
     // cell (10) instead of the negative floor.
-    const getHeatmap = createHeatmap();
+    const getHeatmap = createHeatmapQuery();
     const result = await getHeatmap(
       fakeDb([
         { weekday: 1, hour: 0, avg_price: '0' },
@@ -107,7 +107,7 @@ describe('heatmap NUMERIC aggregate handling (audit #3913)', () => {
   });
 
   it('reports minPrice/maxPrice 0 when the week has no populated cells', async () => {
-    const getHeatmap = createHeatmap();
+    const getHeatmap = createHeatmapQuery();
     const result = await getHeatmap(fakeDb([]));
 
     expect(result.matrix.every((row) => row.hours.every((cell) => cell === null))).toBe(true);

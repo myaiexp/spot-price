@@ -26,13 +26,13 @@ export interface NowResponse {
 // Duration of a single price slot (15 minutes) in milliseconds. Interior
 // windows are this fixed width — the same [start, start+15min) rule as the
 // frontend's findSlotContaining — not stretched to the next stored start.
-const SLOT_DURATION_MS = 15 * 60 * 1000;
+const SLOT_MS = 15 * 60 * 1000;
 
 // /now response cache lifetime — one collection sub-interval. Paired with a
 // per-15-minute-slot cache key (below), this bounds how long an off-boundary
 // collector upsert can stay masked while the slot key still drops the cache the
 // instant the active slot turns over.
-const NOW_TTL = 60 * 1000;
+const NOW_TTL_MS = 60 * 1000;
 
 /**
  * Latest slot whose start is at or before `nowMs`, or undefined when `nowMs`
@@ -67,7 +67,7 @@ async function computeNowResponse(db: Db, now: Date, today: string): Promise<Now
   const nowMs = now.getTime();
   const activeSlot = todaySlots.find((slot) => {
     const start = new Date(slot.datetime).getTime();
-    return nowMs >= start && nowMs < start + SLOT_DURATION_MS;
+    return nowMs >= start && nowMs < start + SLOT_MS;
   });
 
   // Delayed collection / missing data: serve the most recent *past* slot
@@ -115,11 +115,11 @@ async function computeNowResponse(db: Db, now: Date, today: string): Promise<Now
 /**
  * Create a /now query bound to its own cache. Each call returns an independent
  * getNow closure so separate app instances — and successive tests — never share
- * cached data (same isolation guarantee as createHeatmap).
+ * cached data (same isolation guarantee as createHeatmapQuery).
  *
  * Returns the domain payload, or null when there is no current slot to serve
  * (empty today, or now before the first stored slot) — the /now route maps null
- * to 404. The response (including null) is cached for NOW_TTL keyed by the
+ * to 404. The response (including null) is cached for NOW_TTL_MS keyed by the
  * current Helsinki 15-minute slot: repeated polls within a slot reuse one
  * result instead of issuing two DB round-trips each (today + yesterday slices).
  * The slot key drops the cache the instant the slot turns over (every 15 min);
@@ -128,7 +128,7 @@ async function computeNowResponse(db: Db, now: Date, today: string): Promise<Now
  * createTimeKeyedCache.
  */
 export function createNowQuery(): (db: Db) => Promise<NowResponse | null> {
-  const cache = createTimeKeyedCache<NowResponse | null>(NOW_TTL);
+  const cache = createTimeKeyedCache<NowResponse | null>(NOW_TTL_MS);
 
   return async function getNow(db: Db): Promise<NowResponse | null> {
     const now = new Date();

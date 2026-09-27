@@ -2,7 +2,7 @@
 import { Hono } from 'hono';
 import type { Db } from '../db/connection.js';
 import { getHelsinkiToday, getHelsinkiDateRange, shiftDate, isValidCalendarDate } from '../utils/helsinki-time.js';
-import { createHeatmap } from '../queries/heatmap.js';
+import { createHeatmapQuery } from '../queries/heatmap.js';
 import { createNowQuery } from '../queries/now.js';
 import { getSlotsForDate, getSlotsForRange } from '../queries/day.js';
 
@@ -33,7 +33,7 @@ function registerDayRoute(router: Hono, db: Db, path: string, offset: number, em
 export function pricesRoutes(db: Db): Hono {
   const router = new Hono();
   // Per-app query closures: each app instance gets its own cache (no cross-app leak).
-  const getHeatmap = createHeatmap();
+  const getHeatmap = createHeatmapQuery();
   const getNow = createNowQuery();
 
   // Day endpoints: /today (offset 0), /yesterday (-1), /tomorrow (+1, 404 until

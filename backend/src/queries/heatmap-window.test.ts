@@ -10,7 +10,7 @@
 // including weeks that contain a DST transition. Seed ISODOW 7 and assert it
 // lands on matrix[6].
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { createHeatmap } from './heatmap.js';
+import { createHeatmapQuery } from './heatmap.js';
 import { getHelsinkiDateRange, helsinkiWeekStart, shiftDate } from '../utils/helsinki-time.js';
 import { makeHeatmapExecuteDb, type HeatmapCell } from '../test-support/fake-db.js';
 import { flattenSqlText, type QueryWindow } from '../test-support/window-db.js';
@@ -34,7 +34,7 @@ async function heatmapAt(isoNow: string, cells: HeatmapCell[] = []) {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date(isoNow));
   const db = makeHeatmapExecuteDb(cells, 24);
-  const result = await createHeatmap()(db);
+  const result = await createHeatmapQuery()(db);
   return { result, db, weekKey: helsinkiWeekStart() };
 }
 

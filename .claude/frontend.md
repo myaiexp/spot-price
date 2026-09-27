@@ -31,7 +31,7 @@ Pure math is side-effect-free and DOM-free. Render modules own the DOM. `main.js
 | `js/estimator.js` | Cost estimator ("Ajoitusavustin"; optional `{ document, nowMs }` for tests) |
 | `js/hero.js` | Current-price headline (optional `{ document }` for tests) |
 | `js/tabs.js` | `renderTomorrowTab`: applies `tab-state.js` to the Huomenna button (disabled + title, fallback to Tänään via `setActive`; optional `{ document }` for tests). Runs first in the renderer list so chart/insights read the fallen-back tab |
-| `js/main.js` | `init()`: wires controls (every toggle reaches `renderChart` / `renderInsights` through the same `hooks` seam) and hands `buildLoaderDeps()` (incl. `hasCachedData` / `noteStale` / the `tomorrowTab` renderer) into `createLoader`; `SLOT_REFRESH_MS` is 60s. Auto-calls `init()` unless Vitest imported the module (`process.env.VITEST`) so index.html needs no inline script |
+| `js/main.js` | `init()`: wires controls (every toggle reaches `renderChart` / `renderInsights` through the same `deps` seam) and hands `buildLoaderDeps()` (incl. `hasCachedData` / `noteStale` / the `tomorrowTab` renderer) into `createLoader`; `SLOT_REFRESH_MS` is 60s. Auto-calls `init()` unless Vitest imported the module (`process.env.VITEST`) so index.html needs no inline script |
 | `js/api.js` | Same-origin `/porssi/api` fetches |
 | `js/load.js` | Abort-supersede load orchestration, isolated renders, last-known-good on refresh blip |
 | `js/state.js` | Shared mutable UI state (`today`/`yesterday`/`tomorrow`/`now`, active tab, heatmap, chart type/resolution, Chart.js instance, `refreshFailed`) |

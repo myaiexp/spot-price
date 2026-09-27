@@ -1,11 +1,14 @@
-// Pins the hero renderer's user-visible copy (finding #7618, finding #7900).
+// Pins the hero renderer's user-visible copy (finding #7618, finding #7900,
+// finding #9932).
 // load.js only asserts that noteStale fires; cheap-rank polarity lives in
 // hero-calc. These assert renderHero actually paints the tint, caption,
 // yesterday line, empty placeholder, and recovery notes — so an inverted
 // comparison inlined in the renderer cannot leave calc/route tests green.
+// showError is pinned here too: load.js tests only see its stub.
 
 import { describe, it, expect, afterEach } from 'vitest';
-import { renderHero } from '../../frontend/js/hero.js';
+import { renderHero, showError } from '../../frontend/js/hero.js';
+import { LOAD_FAILED_MESSAGE } from '../../frontend/js/load.js';
 import { HERO_TINTS } from '../../frontend/js/hero-calc.js';
 import { state } from '../../frontend/js/state.js';
 import { fakeDocument, fakeEl } from './test-support/fake-dom.js';
@@ -142,6 +145,20 @@ describe('renderHero cheap-rank caption, tint, empty (finding #7900)', () => {
 
     expect(els.heroPrice.innerHTML).toContain('Ei hintatietoja saatavilla');
     expect(els.heroPrice.innerHTML).not.toContain('Halvempi kuin');
+    expect(els.heroTint.style.background).toBeUndefined();
+  });
+});
+
+describe('showError (finding #9932)', () => {
+  it('paints the load-failure sentence into #heroPrice as an error-msg', () => {
+    const { doc, els } = heroDoc();
+
+    showError(LOAD_FAILED_MESSAGE, { document: doc });
+
+    expect(els.heroPrice.innerHTML).toBe(`<div class="error-msg">${LOAD_FAILED_MESSAGE}</div>`);
+    expect(els.heroPrice.innerHTML).toContain('Tietojen lataus epäonnistui');
+    expect(els.heroPrice.innerHTML).not.toContain('Ei hintatietoja saatavilla');
+    expect(els.heroTint.innerHTML).toBe('');
     expect(els.heroTint.style.background).toBeUndefined();
   });
 });

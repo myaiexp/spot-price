@@ -10,8 +10,8 @@ export function renderInsights(deps) {
   const doc = deps?.document ?? globalThis.document;
   const nowMs = deps?.nowMs ?? Date.now();
   const isToday = state.activeTab === 'today';
-  const data = isToday ? state.today : state.tomorrow;
-  const slots = slotsOf(data);
+  const day = isToday ? state.today : state.tomorrow;
+  const slots = slotsOf(day);
 
   const currentIdx = insightCurrentIndex(isToday, slots, nowMs);
   const cards = insightCards(slots, currentIdx);
