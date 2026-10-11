@@ -23,6 +23,6 @@ DST 92/100-slot days, deadline next-day rollover (and a same-day 23:59 deadline 
 
 **`fetch-stub.ts`** — `okJson` / `failedResponse` / `stubFetch` / `stubFailedFetch`
 
-**`fake-dom.ts`** — `fakeEl` / `fakeDocument` document-like double for renderer copy tests (getElementById + createElement, no jsdom)
+**`fake-dom.ts`** — `fakeEl` / `fakeDocument` / `fakeClassList` / `fakeButton` for renderer tests (getElementById + createElement, no jsdom). `fakeClassList.toggle` matches the DOM: omitted or `undefined` force flips, a boolean force adds or removes. `className` and `classList` share one token set. Button tests use `fakeButton` instead of a local classList.
 
 **`rows.ts`** — `RawRow` / `Slot` types, `row()` / `taxedRow()` (DB rows) and `slot()` / `stepSlots()` (frontend 15-min slots). Frontend tests import these rather than rebuilding `{datetime, priceWithTax, priceNoTax}` per file.

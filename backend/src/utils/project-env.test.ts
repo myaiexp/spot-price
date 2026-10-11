@@ -6,8 +6,9 @@ import { projectEnvPath } from './project-env.js';
 
 describe('projectEnvPath', () => {
   it('resolves the project-root .env from src/ and dist/ entries, not backend/.env', () => {
-    // `npm run dev`, `npm run backfill`, and both systemd units run with
-    // cwd=backend/, where backend/.env does not exist.
+    // `npm run dev`, `npm run backfill`, and the collector unit run with
+    // cwd=backend/. The API unit's WorkingDirectory is the project root.
+    // backend/.env does not exist in either case.
     for (const entry of [
       'file:///repo/backend/src/index.ts',
       'file:///repo/backend/dist/index.js',

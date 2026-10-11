@@ -1,6 +1,6 @@
 # Frontend
 
-No-build ES-module app: `frontend/index.html` (markup) + `frontend/styles.css` + `frontend/js/*.js` loaded via `<script type="module" src="./js/main.js">` (no inline boot — CSP `script-src` omits `'unsafe-inline'`). Chart.js from CDN. Design system is mase.fi's (near-black, golden-amber accent, Bricolage Grotesque + DM Sans). Self-hosted faces are generated from repo-root `fonts.json` into `frontend/fonts/` (`~/Projects/helm/scripts/webfonts fonts.json`). The manifest stays out of `frontend/` because deploy rsyncs that tree. The `/porssi` nginx location sets the CSP; committed snippet is `deploy/nginx-porssi.conf`.
+No-build ES-module app: `frontend/index.html` (markup) + `frontend/styles.css` + `frontend/js/*.js` loaded via `<script type="module" src="./js/main.js">` (no inline boot — CSP `script-src` omits `'unsafe-inline'`). Chart.js from CDN. Design system is mase.fi's (near-black, golden-amber accent, Bricolage Grotesque + DM Sans). Fonts are self-hosted in `frontend/fonts/` (`fonts.css` linked before `styles.css`), generated from repo-root `fonts.json` by `~/Projects/helm/scripts/webfonts fonts.json`. Change the weights there and regenerate; don't edit `fonts.css` or re-add Google Fonts (the CSP is `font-src 'self'`). The manifest stays out of `frontend/` because deploy rsyncs that tree. The `/porssi` nginx location sets the CSP; committed snippet is `deploy/nginx-porssi.conf`.
 
 ## Module split
 

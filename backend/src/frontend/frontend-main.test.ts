@@ -21,6 +21,7 @@ import {
   SLOT_REFRESH_MS,
 } from '../../../frontend/js/main.js';
 import { renderTomorrowTab } from '../../../frontend/js/tabs.js';
+import { fakeButton } from '../test-support/fake-dom.js';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -37,60 +38,15 @@ afterEach(() => {
   state.refreshFailed = false;
 });
 
-function classSet(initial: string[] = []) {
-  const classes = new Set(initial);
-  return {
-    add: (c: string) => {
-      classes.add(c);
-    },
-    remove: (c: string) => {
-      classes.delete(c);
-    },
-    contains: (c: string) => classes.has(c),
-    toggle: (c: string, force?: boolean) => {
-      if (force) classes.add(c);
-      else classes.delete(c);
-    },
-  };
-}
-
-function button({
-  disabled = false,
-  active = false,
-  dataset = {},
-  id,
-}: {
-  disabled?: boolean;
-  active?: boolean;
-  dataset?: Record<string, string>;
-  id?: string;
-} = {}) {
-  const classList = classSet(active ? ['active'] : []);
-  const listeners: Array<() => void> = [];
-  return {
-    id,
-    disabled,
-    dataset,
-    title: '',
-    classList,
-    addEventListener: (_ev: string, fn: () => void) => {
-      listeners.push(fn);
-    },
-    click() {
-      for (const fn of listeners) fn();
-    },
-  };
-}
-
 function stubDocument({
   tabs = [],
   byId = {},
   groups = {},
 }: {
-  tabs?: ReturnType<typeof button>[];
-  byId?: Record<string, ReturnType<typeof button> | null>;
+  tabs?: ReturnType<typeof fakeButton>[];
+  byId?: Record<string, ReturnType<typeof fakeButton> | null>;
   // Other toggle groups by selector, e.g. '#chartTypeToggle .toggle-btn'.
-  groups?: Record<string, ReturnType<typeof button>[]>;
+  groups?: Record<string, ReturnType<typeof fakeButton>[]>;
 } = {}) {
   vi.stubGlobal('document', {
     querySelectorAll: (selector: string) =>
@@ -211,8 +167,8 @@ describe('init production wiring (finding #7619)', () => {
   });
 
   it('does not switch tabs when disabled Huomenna is clicked', () => {
-    const today = button({ active: true, dataset: { tab: 'today' } });
-    const tomorrow = button({
+    const today = fakeButton({ active: true, dataset: { tab: 'today' } });
+    const tomorrow = fakeButton({
       disabled: true,
       dataset: { tab: 'tomorrow' },
       id: 'tabTomorrow',
@@ -234,8 +190,8 @@ describe('init production wiring (finding #7619)', () => {
     // A click that set activeTab without renderInsights/renderChart would
     // revive the stale-card bug (audit #5552) and ship. The disabled-click
     // case above cannot catch that — it never reaches the handler.
-    const today = button({ active: true, dataset: { tab: 'today' } });
-    const tomorrow = button({
+    const today = fakeButton({ active: true, dataset: { tab: 'today' } });
+    const tomorrow = fakeButton({
       dataset: { tab: 'tomorrow' },
       id: 'tabTomorrow',
     });
@@ -259,8 +215,8 @@ describe('init production wiring (finding #7619)', () => {
   it('chart type and resolution toggles call the injected renderChart (finding #9587)', () => {
     // A handler calling the bare import would reach the real Chart.js path
     // (no #priceChart in the stub) and never touch this spy.
-    const bar = button({ dataset: { value: 'bar' } });
-    const hourly = button({ dataset: { value: 'hourly' } });
+    const bar = fakeButton({ dataset: { value: 'bar' } });
+    const hourly = fakeButton({ dataset: { value: 'hourly' } });
     stubDocument({
       groups: {
         '#chartTypeToggle .toggle-btn': [bar],

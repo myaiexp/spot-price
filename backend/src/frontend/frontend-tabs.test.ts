@@ -6,6 +6,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { state } from '../../../frontend/js/state.js';
 import { renderTomorrowTab } from '../../../frontend/js/tabs.js';
+import { fakeButton } from '../test-support/fake-dom.js';
 import { slot } from '../test-support/rows.js';
 
 afterEach(() => {
@@ -13,26 +14,10 @@ afterEach(() => {
   state.activeTab = 'today';
 });
 
-function tabButton(tab: string, active: boolean) {
-  const classes = new Set(active ? ['active'] : []);
-  return {
-    disabled: false,
-    title: '',
-    dataset: { tab },
-    classList: {
-      contains: (c: string) => classes.has(c),
-      toggle: (c: string, force?: boolean) => {
-        if (force) classes.add(c);
-        else classes.delete(c);
-      },
-    },
-  };
-}
-
 // Document seam passed as deps.document — no global stub needed.
 function tabsDoc(active: 'today' | 'tomorrow') {
-  const today = tabButton('today', active === 'today');
-  const tomorrow = tabButton('tomorrow', active === 'tomorrow');
+  const today = fakeButton({ dataset: { tab: 'today' }, active: active === 'today' });
+  const tomorrow = fakeButton({ dataset: { tab: 'tomorrow' }, active: active === 'tomorrow' });
   const doc = {
     getElementById: (id: string) => (id === 'tabTomorrow' ? tomorrow : null),
     querySelectorAll: (sel: string) => (sel === '.tab-btn' ? [today, tomorrow] : []),

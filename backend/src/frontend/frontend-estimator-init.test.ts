@@ -8,53 +8,21 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { initEstimator } from '../../../frontend/js/estimator.js';
 import { fakeDocument, fakeEl, type FakeEl } from '../test-support/fake-dom.js';
 
-type ClassList = {
-  add: (token: string) => void;
-  remove: (token: string) => void;
-  contains: (token: string) => boolean;
-};
-
-type ChipEl = FakeEl & { classList: ClassList };
-
-// classList on top of fakeEl's className. The chip handler toggles .active;
-// fakeEl records listeners but has no classList of its own.
-function classListFor(el: FakeEl): ClassList {
-  const tokens = () => new Set(el.className.split(/\s+/).filter(Boolean));
-  const write = (set: Set<string>) => {
-    el.className = [...set].join(' ');
-  };
-  return {
-    add(token) {
-      const set = tokens();
-      set.add(token);
-      write(set);
-    },
-    remove(token) {
-      const set = tokens();
-      set.delete(token);
-      write(set);
-    },
-    contains(token) {
-      return tokens().has(token);
-    },
-  };
-}
-
-function chipByName(container: FakeEl, name: string): ChipEl {
+function chipByName(container: FakeEl, name: string): FakeEl {
   const chip = container.children.find((child) => child.textContent.includes(name));
   if (!chip) throw new Error(`missing device chip ${name}`);
-  return chip as ChipEl;
+  return chip;
 }
 
 function estimatorInitDoc() {
   const deviceChips = fakeEl() as FakeEl & {
-    querySelectorAll: (selector: string) => ChipEl[];
+    querySelectorAll: (selector: string) => FakeEl[];
   };
   deviceChips.querySelectorAll = (selector: string) => {
     const want = selector.startsWith('.') ? selector.slice(1) : selector;
     return deviceChips.children.filter((child) =>
       child.className.split(/\s+/).includes(want),
-    ) as ChipEl[];
+    );
   };
   const inputPower = fakeEl();
   const inputDuration = fakeEl();
@@ -71,11 +39,7 @@ function estimatorInitDoc() {
   return {
     doc: {
       getElementById: (id: string) => base.getElementById(id),
-      createElement: (tag: string) => {
-        const el = base.createElement(tag) as ChipEl;
-        el.classList = classListFor(el);
-        return el;
-      },
+      createElement: (tag: string) => base.createElement(tag),
     },
     deviceChips,
     inputPower,

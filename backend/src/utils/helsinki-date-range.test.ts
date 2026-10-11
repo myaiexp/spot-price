@@ -1,7 +1,7 @@
-// Unit tests for Helsinki DST date handling: getHelsinkiDateRange (#1609) +
-// shiftDate DST-immunity (#3123).
+// Unit tests for getHelsinkiDateRange and shiftDate (audit #1609, #3123).
+// GET /now's yesterday slot is pinned in routes/now-yesterday-slot.test.ts.
 import { describe, it, expect } from 'vitest';
-import { getHelsinkiDateRange, shiftDate } from '../utils/helsinki-time.js';
+import { getHelsinkiDateRange, shiftDate } from './helsinki-time.js';
 
 /**
  * These tests pin the CORRECT Europe/Helsinki midnight-to-midnight UTC window
@@ -112,20 +112,5 @@ describe('shiftDate across DST boundaries (audit #3123)', () => {
   it('summer control 2026-07-15: +/-1 are plain calendar steps', () => {
     expect(shiftDate('2026-07-15', 1)).toBe('2026-07-16');
     expect(shiftDate('2026-07-15', -1)).toBe('2026-07-14');
-  });
-});
-
-/**
- * GET /now derives yesterday as shiftDate(today, -1) and matches the
- * same-time-of-day slot from that day. Across a DST boundary the raw-ms form
- * fetched the wrong day (so the yesterday comparison silently vanished). These
- * pin the corrected yesterday lookups that the /now handler depends on.
- */
-describe('/now yesterday-slot date lookup (audit #3123)', () => {
-  it('today = day after fall-back (2026-10-26) -> yesterday is the 25h day 2026-10-25', () => {
-    expect(shiftDate('2026-10-26', -1)).toBe('2026-10-25');
-  });
-  it('today = day after spring-forward (2026-03-30) -> yesterday is the 23h day 2026-03-29', () => {
-    expect(shiftDate('2026-03-30', -1)).toBe('2026-03-29');
   });
 });
