@@ -10,3 +10,29 @@ WorkingDirectory=/home/mase/Projects/spot-price/backend
 ExecStart=/usr/bin/node dist/collector.js
 EnvironmentFile=/home/mase/Projects/spot-price/.env
 User=mase
+# House sandbox, same directives as deploy/spot-price.service.d/20-sandbox.conf.
+# ProtectHome=tmpfs hides WorkingDirectory and the project .env; BindReadOnlyPaths
+# mounts that tree back read-only. The collector only reads it. NoNewPrivileges
+# blocks setuid sudo (this user has NOPASSWD: ALL). No MemoryDenyWriteExecute:
+# Node's JIT needs W^X. MemoryMax=512M is the sandbox floor for a short oneshot.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=tmpfs
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+# Link-local only. A wider private-range deny stays green against local Postgres
+# while blackholing the spot-hinta and sahkotin calls this unit exists to make.
+IPAddressDeny=169.254.0.0/16
+BindReadOnlyPaths=/home/mase/Projects/spot-price
+MemoryMax=512M

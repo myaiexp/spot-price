@@ -1,5 +1,8 @@
 # Tracked copy of /etc/systemd/system/spot-price.service — edit here, then:
 # sudo cp deploy/spot-price.service /etc/systemd/system/ && sudo systemctl daemon-reload
+# Sandbox drop-in (copy too): deploy/spot-price.service.d/20-sandbox.conf
+#   sudo mkdir -p /etc/systemd/system/spot-price.service.d
+#   sudo cp deploy/spot-price.service.d/20-sandbox.conf /etc/systemd/system/spot-price.service.d/
 [Unit]
 Description=spot-price
 After=network.target
@@ -13,6 +16,10 @@ Restart=always
 RestartSec=5
 Environment=NODE_ENV=production
 EnvironmentFile=/home/mase/Projects/spot-price/.env
+# Blocks setuid sudo (this user has NOPASSWD: ALL). The rest of the sandbox —
+# ProtectHome=tmpfs plus the read-only project bind — is the drop-in above.
+# Do not set ProtectHome in this file without that bind.
+NoNewPrivileges=yes
 
 [Install]
 WantedBy=multi-user.target

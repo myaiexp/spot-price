@@ -14,7 +14,7 @@
     "db:migrate": "drizzle-kit migrate"
   },
   "dependencies": {
-    "@hono/node-server": "^1.19.14",
+    "@hono/node-server": "^1.19.15",
     "dotenv": "^16.4.7",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.13.9",
@@ -23,11 +23,11 @@
   "devDependencies": {
     "@types/node": "^24.13.3",
     "@types/pg": "^8.11.11",
-    "@vitest/coverage-v8": "^4.1.8",
+    "@vitest/coverage-v8": "^4.1.11",
     "drizzle-kit": "^0.31.10",
     "tsx": "^4.19.3",
     "typescript": "^5.7.3",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.11"
   },
   "overrides": {
     "@esbuild-kit/esm-loader": "npm:get-tsconfig@^4",
