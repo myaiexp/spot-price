@@ -1,5 +1,5 @@
 // Tests for the frontend's pure cost-estimator logic
-// (../../frontend/js/estimator-calc.js): forward-slot filtering (drop past
+// (../../../frontend/js/estimator-calc.js): forward-slot filtering (drop past
 // windows), deadline resolution with next-day rollover, and the optimal-window
 // search including the unclamped past-the-end window end index.
 
@@ -11,9 +11,9 @@ import {
   isDeadlineDayUnavailable,
   parseDeadlineMinutes,
   collectEstimatorSlots,
-} from '../../frontend/js/estimator-calc.js';
-import { SLOT_MS } from '../../frontend/js/slot-time.js';
-import { slot, stepSlots } from './test-support/rows.js';
+} from '../../../frontend/js/estimator-calc.js';
+import { SLOT_MS } from '../../../frontend/js/slot-time.js';
+import { slot, stepSlots } from '../test-support/rows.js';
 
 // Summer (EEST, UTC+3) slot at a Helsinki wall-clock time — deterministic, no DST
 // inside the test window. Test-specific day/hour helper on top of shared `slot`.

@@ -1,4 +1,4 @@
-// Tests for the dashboard entry wiring (../../frontend/js/main.js).
+// Tests for the dashboard entry wiring (../../../frontend/js/main.js).
 // createLoader's last-known-good path is optional, so load tests that inject
 // hasCachedData themselves cannot catch init() omitting it. These pin the
 // production deps object, that a disabled Huomenna click does not switch tabs
@@ -10,8 +10,8 @@
 // behaviour lives in frontend-tabs.test.ts.
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { state } from '../../frontend/js/state.js';
-import { SLOT_MS } from '../../frontend/js/slot-time.js';
+import { state } from '../../../frontend/js/state.js';
+import { SLOT_MS } from '../../../frontend/js/slot-time.js';
 import {
   buildLoaderDeps,
   hasCachedData,
@@ -19,8 +19,8 @@ import {
   init,
   noteStale,
   SLOT_REFRESH_MS,
-} from '../../frontend/js/main.js';
-import { renderTomorrowTab } from '../../frontend/js/tabs.js';
+} from '../../../frontend/js/main.js';
+import { renderTomorrowTab } from '../../../frontend/js/tabs.js';
 
 afterEach(() => {
   vi.unstubAllGlobals();

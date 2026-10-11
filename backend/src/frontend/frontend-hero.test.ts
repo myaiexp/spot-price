@@ -7,11 +7,11 @@
 // showError is pinned here too: load.js tests only see its stub.
 
 import { describe, it, expect, afterEach } from 'vitest';
-import { renderHero, showError } from '../../frontend/js/hero.js';
-import { LOAD_FAILED_MESSAGE } from '../../frontend/js/load.js';
-import { HERO_TINTS } from '../../frontend/js/hero-calc.js';
-import { state } from '../../frontend/js/state.js';
-import { fakeDocument, fakeEl } from './test-support/fake-dom.js';
+import { renderHero, showError } from '../../../frontend/js/hero.js';
+import { LOAD_FAILED_MESSAGE } from '../../../frontend/js/load.js';
+import { HERO_TINTS } from '../../../frontend/js/hero-calc.js';
+import { state } from '../../../frontend/js/state.js';
+import { fakeDocument, fakeEl } from '../test-support/fake-dom.js';
 
 const SLOT_ISO = '2026-07-18T11:30:00.000Z'; // 14:30 EEST
 

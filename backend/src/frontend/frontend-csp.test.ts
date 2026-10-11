@@ -10,7 +10,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 
 function read(rel: string) {
   return readFileSync(resolve(ROOT, rel), 'utf8');

@@ -1,4 +1,4 @@
-// Tests for the frontend's pure price algorithms (../../frontend/js/calc.js):
+// Tests for the frontend's pure price algorithms (../../../frontend/js/calc.js):
 // window sums, cheapest block, next-cheap window, peak-block gap bridging, and
 // wall-clock ghost alignment. emaAggregate bucketing: frontend-ema.test.ts.
 
@@ -11,8 +11,8 @@ import {
   findPeakBlock,
   emaAggregate,
   alignSecondaryByWallClock,
-} from '../../frontend/js/calc.js';
-import { stepSlots } from './test-support/rows.js';
+} from '../../../frontend/js/calc.js';
+import { stepSlots } from '../test-support/rows.js';
 
 // Real 15-min datetimes. `2026-07-18T00:${i}` was not a timestamp (`00:1`), so a
 // calc that reads datetime got NaN from these fixtures (finding #12151).

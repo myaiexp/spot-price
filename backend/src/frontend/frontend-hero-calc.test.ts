@@ -1,5 +1,5 @@
 // Tests for the hero card's pure presentation logic
-// (../../frontend/js/hero-calc.js): the cheap-rank → band/tint/copy mapping.
+// (../../../frontend/js/hero-calc.js): the cheap-rank → band/tint/copy mapping.
 //
 // This is the layer that turns /now's `cheaperThanPercent` into the headline's
 // money cue, and it had no coverage while it read the value with the polarity
@@ -7,7 +7,7 @@
 // (audit #5549, #5552, #5563). These pin the direction: high = cheap, always.
 
 import { describe, it, expect } from 'vitest';
-import { heroBand, heroSignal, HERO_TINTS } from '../../frontend/js/hero-calc.js';
+import { heroBand, heroSignal, HERO_TINTS } from '../../../frontend/js/hero-calc.js';
 
 describe('heroBand polarity (high = cheap)', () => {
   it('tints a near-cheapest slot green, never red', () => {

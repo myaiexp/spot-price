@@ -1,10 +1,10 @@
-// Tests for emaAggregate (../../frontend/js/calc.js): hourly EMA buckets keyed
+// Tests for emaAggregate (../../../frontend/js/calc.js): hourly EMA buckets keyed
 // by absolute hour — 23/25 buckets on DST days, and an interior gap (a missing
 // :00 slot) still starts its own hour instead of merging into the previous one.
 
 import { describe, it, expect } from 'vitest';
-import { emaAggregate } from '../../frontend/js/calc.js';
-import { stepSlots } from './test-support/rows.js';
+import { emaAggregate } from '../../../frontend/js/calc.js';
+import { stepSlots } from '../test-support/rows.js';
 
 // Index-as-price stepping — DST-day arrays key on sequence position.
 const indexSlots = (startUtcIso: string, count: number) =>
