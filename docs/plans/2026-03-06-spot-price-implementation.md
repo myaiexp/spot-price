@@ -1,5 +1,7 @@
 # Spot Price Implementation Plan
 
+> Historical snapshot (Phase 1, 2026-03). Superseded — current architecture: CLAUDE.md and .claude/.
+
 **Goal:** Build a Hono + PostgreSQL backend that collects Finnish electricity spot prices, and a redesigned frontend with area charts, comparison overlays, and smart insights — all themed to match mase.fi.
 
 **Architecture:** Backend service on VPS port 3500 (Hono + Drizzle + PostgreSQL) with a systemd timer collecting prices every 15 minutes from spot-hinta.fi. Single-file frontend served statically at mase.fi/porssi/. Frontend calls our own API instead of spot-hinta.fi directly.

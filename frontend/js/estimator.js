@@ -21,14 +21,21 @@ const DEVICES = [
 let selectedDeviceIndex = -1;
 let estimatorDebounceTimer = null;
 
-function initDeviceChips() {
-  const container = document.getElementById('deviceChips');
+function timerFns(deps) {
+  return {
+    clearTimeout: deps?.clearTimeout ?? ((id) => globalThis.clearTimeout(id)),
+    setTimeout: deps?.setTimeout ?? ((fn, ms) => globalThis.setTimeout(fn, ms)),
+  };
+}
+
+function initDeviceChips(deps) {
+  const doc = deps?.document ?? globalThis.document;
+  const container = doc.getElementById('deviceChips');
   DEVICES.forEach((device, idx) => {
-    const chip = document.createElement('button');
+    const chip = doc.createElement('button');
     chip.className = 'device-chip';
     chip.textContent = `${device.icon} ${device.name}`;
     chip.addEventListener('click', () => {
-      // Toggle selection
       if (selectedDeviceIndex === idx) {
         selectedDeviceIndex = -1;
         chip.classList.remove('active');
@@ -37,34 +44,23 @@ function initDeviceChips() {
         selectedDeviceIndex = idx;
         chip.classList.add('active');
 
-        // Auto-populate inputs
-        const powerInput = document.getElementById('inputPower');
-        const durationInput = document.getElementById('inputDuration');
-        powerInput.value = device.power !== null ? device.power : '';
-        durationInput.value = device.duration !== null ? device.duration : '';
+        // <input>.value is text. Assign the string so this does not depend on
+        // the browser coercing a number when the property is set.
+        const powerInput = doc.getElementById('inputPower');
+        const durationInput = doc.getElementById('inputDuration');
+        powerInput.value = device.power !== null ? String(device.power) : '';
+        durationInput.value = device.duration !== null ? String(device.duration) : '';
       }
-      scheduleEstimatorUpdate();
+      scheduleEstimatorUpdate(deps);
     });
     container.appendChild(chip);
   });
 }
 
-function scheduleEstimatorUpdate() {
-  clearTimeout(estimatorDebounceTimer);
-  estimatorDebounceTimer = setTimeout(updateEstimator, 300);
-}
-
-// Today + tomorrow slots, minus any whose window has already ended, so the search
-// only ever recommends windows that start now or later.
-function getEstimatorSlots(nowMs) {
-  return collectEstimatorSlots(state.today, state.tomorrow, nowMs);
-}
-
-// Format a window {startIndex, endExclusive, cost} against the slots array.
-// slotSpanLabel uses the same colon-form exclusive-end helper as the insight
-// cards, so the two spans on this page cannot drift in separator or bound.
-function windowLabel(slots, win) {
-  return slotSpanLabel(slots, win.startIndex, win.endExclusive);
+function scheduleEstimatorUpdate(deps) {
+  const { clearTimeout: clearTimeoutFn, setTimeout: setTimeoutFn } = timerFns(deps);
+  clearTimeoutFn(estimatorDebounceTimer);
+  estimatorDebounceTimer = setTimeoutFn(() => updateEstimator(deps), 300);
 }
 
 export function updateEstimator(deps) {
@@ -80,7 +76,7 @@ export function updateEstimator(deps) {
     return;
   }
 
-  const slots = getEstimatorSlots(nowMs);
+  const slots = collectEstimatorSlots(state.today, state.tomorrow, nowMs);
   if (slots.length === 0) {
     container.innerHTML = '<div class="estimator-no-data">Ei hintatietoja laskentaan</div>';
     return;
@@ -105,12 +101,12 @@ export function updateEstimator(deps) {
       <div class="estimator-result-card estimator-result-card--best card">
         <div class="estimator-result-card__label">Halvin aika</div>
         <div class="estimator-result-card__value">${result.best.cost.toFixed(2)} €</div>
-        <div class="estimator-result-card__detail">${windowLabel(slots, result.best)}</div>
+        <div class="estimator-result-card__detail">${slotSpanLabel(slots, result.best.startIndex, result.best.endExclusive)}</div>
       </div>
       <div class="estimator-result-card estimator-result-card--worst card">
         <div class="estimator-result-card__label">Kallein aika</div>
         <div class="estimator-result-card__value">${result.worst.cost.toFixed(2)} €</div>
-        <div class="estimator-result-card__detail">${windowLabel(slots, result.worst)}</div>
+        <div class="estimator-result-card__detail">${slotSpanLabel(slots, result.worst.startIndex, result.worst.endExclusive)}</div>
       </div>
       <div class="estimator-result-card estimator-result-card--savings card">
         <div class="estimator-result-card__label">Säästö</div>
@@ -121,10 +117,20 @@ export function updateEstimator(deps) {
   `;
 }
 
-// Wire device chips and input listeners; called once on init.
-export function initEstimator() {
-  initDeviceChips();
-  document.getElementById('inputPower').addEventListener('input', scheduleEstimatorUpdate);
-  document.getElementById('inputDuration').addEventListener('input', scheduleEstimatorUpdate);
-  document.getElementById('inputDeadline').addEventListener('input', scheduleEstimatorUpdate);
+// Wire device chips and input listeners. Optional deps match the other renderers
+// so tests can pass a fake document and fake timers. Called once on page init;
+// calling it again starts from a cleared selection and a cleared debounce.
+export function initEstimator(deps) {
+  const doc = deps?.document ?? globalThis.document;
+  const { clearTimeout: clearTimeoutFn } = timerFns(deps);
+  clearTimeoutFn(estimatorDebounceTimer);
+  estimatorDebounceTimer = null;
+  // A fresh chip row has nothing selected. Leftover module state would make
+  // the first click on that index toggle off instead of applying the preset.
+  selectedDeviceIndex = -1;
+  initDeviceChips(deps);
+  const schedule = () => scheduleEstimatorUpdate(deps);
+  doc.getElementById('inputPower').addEventListener('input', schedule);
+  doc.getElementById('inputDuration').addEventListener('input', schedule);
+  doc.getElementById('inputDeadline').addEventListener('input', schedule);
 }

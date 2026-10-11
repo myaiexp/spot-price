@@ -28,7 +28,7 @@ Pure math is side-effect-free and DOM-free. Render modules own the DOM. `main.js
 | `js/chart.js` | DOM seam: placeholder, `chartSeries` → `buildChartConfig`, destroy previous Chart.js instance then construct (optional `{ document, nowMs, Chart, matchMedia }` for tests) |
 | `js/insights.js` | Cheapest 2h / next cheap / peak cards (optional `{ document, nowMs }` for tests) |
 | `js/heatmap.js` | Weekly heatmap (optional `{ document }` for tests) |
-| `js/estimator.js` | Cost estimator ("Ajoitusavustin"; optional `{ document, nowMs }` for tests) |
+| `js/estimator.js` | Cost estimator ("Ajoitusavustin"). `updateEstimator` takes optional `{ document, nowMs }`; `initEstimator` takes optional `{ document, setTimeout, clearTimeout }` |
 | `js/hero.js` | Current-price headline (optional `{ document }` for tests) |
 | `js/tabs.js` | `renderTomorrowTab`: applies `tab-state.js` to the Huomenna button (disabled + title, fallback to Tänään via `setActive`; optional `{ document }` for tests). Runs first in the renderer list so chart/insights read the fallen-back tab |
 | `js/main.js` | `init()`: wires controls (every toggle reaches `renderChart` / `renderInsights` through the same `deps` seam) and hands `buildLoaderDeps()` (incl. `hasCachedData` / `noteStale` / the `tomorrowTab` renderer) into `createLoader`; `SLOT_REFRESH_MS` is 60s. Auto-calls `init()` unless Vitest imported the module (`process.env.VITEST`) so index.html needs no inline script |

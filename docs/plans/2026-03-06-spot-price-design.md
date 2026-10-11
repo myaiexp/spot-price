@@ -1,5 +1,7 @@
 # Spot Price — Design Document
 
+> Historical snapshot (Phase 1, 2026-03). Superseded — current architecture: CLAUDE.md and .claude/.
+
 **Date:** 2026-03-06
 **Status:** Approved
 

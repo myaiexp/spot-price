@@ -1,9 +1,10 @@
-// In-memory Drizzle Db doubles for route + collector tests. Select-chain fakes
-// resolve a fixed result set (optionally counting SELECTs to probe caching);
-// insert-chain fakes resolve a pg-style { rowCount } (optionally counting chunks
-// or capturing the rows written). Every route/collector test hand-rolled these
-// same `as unknown as Db` casts before — the fakes' contract now lives here, so a
-// change to the Db shape is a one-file edit instead of a dozen.
+// Select, insert, and heatmap execute() doubles for route/query/collector tests.
+// Select-chain fakes resolve a fixed result set (optionally counting SELECTs to
+// probe caching). Insert-chain fakes resolve a pg-style { rowCount } (counting
+// chunks, or capturing the rows written plus the ON CONFLICT config). The heatmap
+// execute() double answers getHeatmap's cell/week-number call pair and captures
+// the week window. One shared contract: a Db-shape change is a one-file edit
+// instead of a dozen.
 import type { Db } from '../db/connection.js';
 import { windowOf, type QueryWindow } from './window-db.js';
 

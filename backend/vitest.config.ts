@@ -14,13 +14,14 @@ export default defineConfig({
       allowExternal: true,
       include: ['src/**/*.ts', `${FRONTEND_JS}/**/*.js`],
       exclude: ['**/*.test.ts', 'src/test-support/**'],
-      // Ratchet: the measured whole-suite numbers (2026-09-14, finding #9926).
-      // Raise when coverage grows; never lower to make a run pass.
+      // Ratchet: whole-suite coverage on 2026-10-11 (reporter 95.94 / 90.92 /
+      // 96.01 / 97.11), stored at 0.1 resolution so reporter rounding cannot
+      // fail the next run. Raise when coverage grows; never lower to pass.
       thresholds: {
-        statements: 92.9,
-        branches: 89.4,
-        functions: 92.4,
-        lines: 93.8,
+        statements: 95.9,
+        branches: 90.9,
+        functions: 96,
+        lines: 97.1,
       },
     },
   },

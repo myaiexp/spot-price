@@ -1,5 +1,7 @@
 # Phase 2 Implementation Plan
 
+> Historical snapshot (Phase 2, 2026-03). Superseded — current architecture: CLAUDE.md and .claude/.
+
 **Goal:** Add historical backfill, EMA-weighted weekly heatmap, cost estimator with smart scheduling, and chart view controls.
 
 **Architecture:** Backend gets a backfill collector (sahkotin.fi, hourly data) and a heatmap endpoint with two-level EMA computation. Frontend gets chart toggles (area/bar, 15min/hourly), a CSS grid heatmap, and a sliding-window cost estimator. All EMA uses α=0.3.

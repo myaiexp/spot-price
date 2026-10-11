@@ -1,5 +1,7 @@
 # Phase 2 Design: History, Heatmap & Cost Estimator
 
+> Historical snapshot (Phase 2, 2026-03). Superseded — current architecture: CLAUDE.md and .claude/.
+
 **Date:** 2026-03-07
 **Status:** Approved
 
