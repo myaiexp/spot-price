@@ -1,12 +1,12 @@
-// Tests for the tomorrow-tab renderer (../../frontend/js/tabs.js): Huomenna
+// Tests for the tomorrow-tab renderer (../../../frontend/js/tabs.js): Huomenna
 // disabled with its Finnish title when tomorrow is unpublished, the midnight
 // fallback to Tänään moving .active, and re-enabling once prices land
 // (finding #9607 moved this out of main.js; behaviour from finding #7099).
 
 import { describe, it, expect, afterEach } from 'vitest';
-import { state } from '../../frontend/js/state.js';
-import { renderTomorrowTab } from '../../frontend/js/tabs.js';
-import { slot } from './test-support/rows.js';
+import { state } from '../../../frontend/js/state.js';
+import { renderTomorrowTab } from '../../../frontend/js/tabs.js';
+import { slot } from '../test-support/rows.js';
 
 afterEach(() => {
   state.tomorrow = null;

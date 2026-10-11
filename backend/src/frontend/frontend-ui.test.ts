@@ -1,11 +1,11 @@
-// Tests for exclusive toggle groups (../../frontend/js/ui.js).
+// Tests for exclusive toggle groups (../../../frontend/js/ui.js).
 // A disabled Huomenna click must not call onSelect or steal .active — the
 // check lives in the click handler (not at wire time) because
 // renderTomorrowTab can disable the button after listeners are attached
 // (finding #7619). setActive is the shared .active rewrite (finding #9607).
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { setActive, wireToggleGroup } from '../../frontend/js/ui.js';
+import { setActive, wireToggleGroup } from '../../../frontend/js/ui.js';
 
 afterEach(() => {
   vi.unstubAllGlobals();

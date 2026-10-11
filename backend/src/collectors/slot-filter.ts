@@ -5,7 +5,8 @@
  * about (`Skipped N slot(s) with invalid fields from <sourceName>`) so upstream
  * data-quality problems stay visible without one bad slot poisoning the batch
  * upsert. An all-invalid input returns [] — whether that is fatal is the
- * caller's call (sahkotin throws, spot-hinta upserts nothing).
+ * caller's call (both sahkotin and spot-hinta throw; an empty list is not
+ * warned about here and means end-of-history only for the backfill walk).
  */
 export function filterValidSlots<T>(
   slots: readonly unknown[],

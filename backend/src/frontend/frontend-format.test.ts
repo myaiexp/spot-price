@@ -1,4 +1,4 @@
-// Tests for the frontend's display formatting (../../frontend/js/format.js):
+// Tests for the frontend's display formatting (../../../frontend/js/format.js):
 // numeric EUR→cents (chart axis), cent *strings*, Helsinki wall-clock labels
 // (prose-style fi-FI dots vs colon form for axes and window spans).
 
@@ -11,8 +11,8 @@ import {
   hourLabel,
   slotBoundaryLabel,
   slotSpanLabel,
-} from '../../frontend/js/format.js';
-import { slot } from './test-support/rows.js';
+} from '../../../frontend/js/format.js';
+import { slot } from '../test-support/rows.js';
 
 // 14:30 EEST (UTC+3) — a mid-afternoon instant with a non-zero minute.
 const ISO_1430 = '2026-07-18T11:30:00.000Z';

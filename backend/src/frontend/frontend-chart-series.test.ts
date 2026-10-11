@@ -1,13 +1,13 @@
-// Tests for the chart's pure series derivation (../../frontend/js/chart-series.js,
+// Tests for the chart's pure series derivation (../../../frontend/js/chart-series.js,
 // finding #9586, finding #9928): colon-form DST-correct labels (two '03:00'
 // buckets on the 25h fall-back day), EMA resolution, ghost nulls, now index per
 // tab, and null for an empty primary — all without a Chart constructor.
 
 import { describe, it, expect } from 'vitest';
-import { chartSeries } from '../../frontend/js/chart-series.js';
-import { emaAggregate } from '../../frontend/js/calc.js';
-import { eurToCents } from '../../frontend/js/format.js';
-import { stepSlots } from './test-support/rows.js';
+import { chartSeries } from '../../../frontend/js/chart-series.js';
+import { emaAggregate } from '../../../frontend/js/calc.js';
+import { eurToCents } from '../../../frontend/js/format.js';
+import { stepSlots } from '../test-support/rows.js';
 
 type SeriesState = {
   activeTab?: string;

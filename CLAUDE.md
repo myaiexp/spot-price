@@ -10,7 +10,7 @@ This file is a **map**, not a manual. Standing architecture lives in `.claude/`.
 - **Frontend**: no-build ES-module app (pure calc vs. render modules, including `state.js` / `ui.js` / `load.js`; DST slot indexing; abort/supersede, last-known-good) — [`.claude/frontend.md`](.claude/frontend.md)
 - **Window bounds & cheap-rank polarity**: exclusive `endExclusive` everywhere; `GET /now` `cheaperThanPercent` is high=cheap — [`.claude/windows.md`](.claude/windows.md)
 - **Collection**: systemd timer → `dist/collector.js`; sahkotin historical backfill — [`.claude/collector.md`](.claude/collector.md)
-- **Testing**: backend vitest runs `frontend-*.test.ts`; shared doubles in `test-support/` (including heatmap-execute and window-db builders) — [`.claude/testing.md`](.claude/testing.md)
+- **Testing**: backend vitest runs `frontend-*.test.ts` from `backend/src/frontend/` (not the src root); shared doubles in `test-support/` (including heatmap-execute and window-db builders) — [`.claude/testing.md`](.claude/testing.md)
 - **EMA** (α=0.3) buckets by Helsinki wall-clock hour (DST-correct 23/25h days, not a fixed 4-slot slice)
 - **Heatmap** is the current week's actual hourly prices (SQL-aggregated), greyed cells for missing data
 - **Dependency hygiene**: `backend/package.json` `overrides` aliases deprecated `@esbuild-kit/esm-loader` (declared by drizzle-kit but never imported — it uses tsx) to `get-tsconfig`; the override also covers transitive `@esbuild-kit/core-utils` so the deprecated chain and `esbuild@0.18.20` cannot come back. Don't remove it.

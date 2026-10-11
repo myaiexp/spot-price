@@ -14,13 +14,13 @@ Both the API (`backend/src/index.ts`) and this CLI refuse to start without `DATA
 
 ## Live collect
 
-Timer fires `dist/collector.js` with no flags. Upserts today's (and already-published tomorrow's) 15-min slots from spot-hinta.fi. Prices arrive already in EUR/kWh with and without tax.
+Timer fires `dist/collector.js` with no flags. Upserts today's (and already-published tomorrow's) 15-min slots from spot-hinta.fi. Prices arrive already in EUR/kWh with and without tax. A non-array body, an empty list, or a non-empty list with no valid slots throws, and `collector.ts` maps that to exit 1 so the oneshot shows as failed (finding #11901). A mixed batch still drops the bad slots and upserts the rest. An empty list is not success here: `TodayAndDayForward` is the live day, unlike a sahkotin chunk where `prices: []` means end of history.
 
 ## Backfill
 
 sahkotin.fi API, hourly data from Dec 2012, EUR/MWh → EUR/kWh × (1 + VAT). The rate is the one in force on the slot's **Helsinki date**, not today's: `vatRateAt` in `src/utils/price-conversion.ts` holds the dated table (23% → 24% from 2013-01-01, 10% for 2022-12-01…2023-04-30, 25.5% from 2024-09-01), boundaries at Helsinki midnight. When the rate changes, append a row there and re-run `--backfill=<first day after the affected span>` so the upsert rewrites the stored rows (finding #9575).
 
-Both collectors fetch through `fetchUpstreamJson` (`src/utils/http.ts`: 15s timeout, redirect follow, `<source> API error: <status>` with sanitized statusText) and filter through `filterValidSlots` (`src/collectors/slot-filter.ts`). Malformed slots (empty/unparseable `date`, non-finite `value`) are dropped and the skip count is logged, matching live collect. A non-empty `prices` array that filters to nothing throws — it is not end-of-history (`prices: []`), which would truncate the rest of the walk. Live collect (spot-hinta) skips the same class of DateTime garbage so one bad slot cannot poison the upsert.
+Both collectors fetch through `fetchUpstreamJson` (`src/utils/http.ts`: 15s timeout, redirect follow, `<source> API error: <status>` with sanitized statusText) and filter through `filterValidSlots` (`src/collectors/slot-filter.ts`). Malformed slots (empty/unparseable `date`, non-finite `value`) are dropped and the skip count is logged, matching live collect. A non-empty `prices` array that filters to nothing throws — it is not end-of-history (`prices: []`), which would truncate the rest of the walk. Live collect (spot-hinta) skips the same class of DateTime garbage so one bad slot cannot poison the upsert, and throws when the whole payload is non-array, empty, or all-invalid.
 
 Scripts live in `backend/package.json` and run `node dist/collector.js` (`dist/` is gitignored). From repo root:
 

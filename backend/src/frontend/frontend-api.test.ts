@@ -1,11 +1,11 @@
-// Tests for the frontend's API layer (../../frontend/js/api.js): every request
+// Tests for the frontend's API layer (../../../frontend/js/api.js): every request
 // carries an abort signal (timeout + caller cancel), 404 means "no data yet"
 // rather than an error, other non-ok statuses throw, today/now failures still
 // reject (last-known-good), and fetchHeatmap hits /prices/heatmap.
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { fetchJSON, fetchPriceBundle, fetchHeatmap, FETCH_TIMEOUT_MS } from '../../frontend/js/api.js';
-import { stubFetch, stubFailedFetch } from './test-support/fetch-stub.js';
+import { fetchJSON, fetchPriceBundle, fetchHeatmap, FETCH_TIMEOUT_MS } from '../../../frontend/js/api.js';
+import { stubFetch, stubFailedFetch } from '../test-support/fetch-stub.js';
 
 afterEach(() => {
   vi.unstubAllGlobals();

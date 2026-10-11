@@ -5,10 +5,10 @@
 // or swapped best/worst cannot leave the calc tests green.
 
 import { describe, it, expect, afterEach } from 'vitest';
-import { updateEstimator } from '../../frontend/js/estimator.js';
-import { state } from '../../frontend/js/state.js';
-import { stepSlots } from './test-support/rows.js';
-import { fakeDocument, fakeEl } from './test-support/fake-dom.js';
+import { updateEstimator } from '../../../frontend/js/estimator.js';
+import { state } from '../../../frontend/js/state.js';
+import { stepSlots } from '../test-support/rows.js';
+import { fakeDocument, fakeEl } from '../test-support/fake-dom.js';
 
 // 16 quarter-hour slots from 20:00 EEST (4h of evening). A 5h job cannot fit.
 const EVENING = stepSlots('2026-07-17T17:00:00.000Z', Array(16).fill(10));

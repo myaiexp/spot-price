@@ -1,8 +1,8 @@
-// Tests for the heatmap colour scale (../../frontend/js/heatmap-calc.js):
+// Tests for the heatmap colour scale (../../../frontend/js/heatmap-calc.js):
 // flat range, both interpolation halves, and out-of-range clamping.
 
 import { describe, it, expect } from 'vitest';
-import { priceToColor } from '../../frontend/js/heatmap-calc.js';
+import { priceToColor } from '../../../frontend/js/heatmap-calc.js';
 
 describe('priceToColor', () => {
   it('returns the amber midpoint when min equals max (no range to scale)', () => {

@@ -13,9 +13,16 @@ afterEach(() => {
 describe('collectPrices request shape (finding #7611)', () => {
   it('fetches TodayAndDayForward with AbortSignal.timeout(FETCH_TIMEOUT_MS)', async () => {
     const timeoutSpy = vi.spyOn(AbortSignal, 'timeout');
-    const fetchMock = stubFetch([]);
+    // A real slot, not []: an empty TodayAndDayForward body is an outage and
+    // throws (finding #11901). This test is the request shape on the success path.
+    const fetchMock = stubFetch([{
+      Rank: 0,
+      DateTime: '2026-06-02T00:00:00+03:00',
+      PriceNoTax: 0.05,
+      PriceWithTax: 0.06275,
+    }]);
 
-    await collectPrices(makeInsertDb(0));
+    await collectPrices(makeInsertDb(1));
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, opts] = fetchMock.mock.calls[0] as [string, RequestInit | undefined];

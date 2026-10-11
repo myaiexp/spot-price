@@ -5,12 +5,12 @@
 // these run without jsdom or the Chart.js CDN global.
 
 import { describe, it, expect, afterEach } from 'vitest';
-import { renderChart } from '../../frontend/js/chart.js';
-import { state } from '../../frontend/js/state.js';
-import { alignSecondaryByWallClock, emaAggregate } from '../../frontend/js/calc.js';
-import { eurToCents } from '../../frontend/js/format.js';
-import { fakeDocument, fakeEl } from './test-support/fake-dom.js';
-import { stepSlots } from './test-support/rows.js';
+import { renderChart } from '../../../frontend/js/chart.js';
+import { state } from '../../../frontend/js/state.js';
+import { alignSecondaryByWallClock, emaAggregate } from '../../../frontend/js/calc.js';
+import { eurToCents } from '../../../frontend/js/format.js';
+import { fakeDocument, fakeEl } from '../test-support/fake-dom.js';
+import { stepSlots } from '../test-support/rows.js';
 
 afterEach(() => {
   state.today = null;

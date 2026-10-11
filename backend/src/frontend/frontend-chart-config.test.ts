@@ -1,11 +1,11 @@
-// Tests for the Chart.js config builder (../../frontend/js/chart-config.js,
+// Tests for the Chart.js config builder (../../../frontend/js/chart-config.js,
 // finding #9586, finding #9928): bar vs area branches (bar type, no fill, ghost
 // stays a line overlay), ghost omitted when empty, x tick stride per resolution,
 // y/tooltip callbacks, the primary gradient (bar vs area, and the no-chartArea
 // fallback), reduced motion, and fresh option objects per call.
 
 import { describe, it, expect } from 'vitest';
-import { buildChartConfig } from '../../frontend/js/chart-config.js';
+import { buildChartConfig } from '../../../frontend/js/chart-config.js';
 
 type Dataset = Record<string, unknown> & { data: (number | null)[] };
 type Config = {

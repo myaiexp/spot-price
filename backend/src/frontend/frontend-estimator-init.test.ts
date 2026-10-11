@@ -5,8 +5,8 @@
 // event schedules exactly one updateEstimator after 300 ms.
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { initEstimator } from '../../frontend/js/estimator.js';
-import { fakeDocument, fakeEl, type FakeEl } from './test-support/fake-dom.js';
+import { initEstimator } from '../../../frontend/js/estimator.js';
+import { fakeDocument, fakeEl, type FakeEl } from '../test-support/fake-dom.js';
 
 type ClassList = {
   add: (token: string) => void;

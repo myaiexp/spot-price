@@ -50,19 +50,20 @@ describe('collectPrices DateTime validation (audit #3129)', () => {
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('Skipped 3 slot(s)'));
   });
 
-  it('all-malformed batch: upserted is 0 and the DB is never touched', async () => {
+  it('all-malformed batch throws and the DB is never touched (finding #11901)', async () => {
     stubFetch([
       { ...goodSlot(0), DateTime: '' },
       { ...goodSlot(1), DateTime: 'garbage' },
     ]);
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const insertSpy = vi.fn();
     const db = { insert: insertSpy } as unknown as Db;
 
-    const result = await collectPrices(db);
-
-    expect(result.upserted).toBe(0);
+    await expect(collectPrices(db)).rejects.toThrow(
+      'spot-hinta.fi returned 2 price slot(s) but no valid slots',
+    );
     expect(insertSpy).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('Skipped 2 slot(s)'));
   });
 
   it('all-valid batch: nothing is skipped and no warning is logged', async () => {
@@ -118,15 +119,15 @@ describe('collectPrices price-field validation (finding #7130)', () => {
   });
 
   for (const [label, slot] of badPriceSlots) {
-    it(`drops a lone ${label} slot without touching the DB`, async () => {
+    it(`throws on a lone ${label} slot without touching the DB (finding #11901)`, async () => {
       stubFetch([slot]);
       const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const insertSpy = vi.fn();
       const db = { insert: insertSpy } as unknown as Db;
 
-      const result = await collectPrices(db);
-
-      expect(result.upserted).toBe(0);
+      await expect(collectPrices(db)).rejects.toThrow(
+        'spot-hinta.fi returned 1 price slot(s) but no valid slots',
+      );
       expect(insertSpy).not.toHaveBeenCalled();
       expect(warn).toHaveBeenCalledWith(expect.stringContaining('Skipped 1 slot(s)'));
     });

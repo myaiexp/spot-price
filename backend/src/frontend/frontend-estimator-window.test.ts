@@ -2,10 +2,10 @@
 // A 1h window must be 60 minutes of clock time, not four array steps.
 
 import { describe, it, expect } from 'vitest';
-import { findOptimalWindow } from '../../frontend/js/estimator-calc.js';
-import { slotSpanLabel } from '../../frontend/js/format.js';
-import { SLOT_MS } from '../../frontend/js/slot-time.js';
-import { stepSlots } from './test-support/rows.js';
+import { findOptimalWindow } from '../../../frontend/js/estimator-calc.js';
+import { slotSpanLabel } from '../../../frontend/js/format.js';
+import { SLOT_MS } from '../../../frontend/js/slot-time.js';
+import { stepSlots } from '../test-support/rows.js';
 
 // Wall-clock length of a returned window. Uses the exclusive-end slot's own
 // start when that slot exists, so a window that jumped a hole measures long.

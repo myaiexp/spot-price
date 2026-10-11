@@ -1,4 +1,4 @@
-// Tests for the dashboard load orchestrator (../../frontend/js/load.js).
+// Tests for the dashboard load orchestrator (../../../frontend/js/load.js).
 // Abort-supersede must not paint an error over a newer load, a superseded
 // resolve must not overwrite state, render exceptions stay isolated from fetch
 // failures, a cold heatmap rejection calls showHeatmapError, a day-data fetch
@@ -7,7 +7,7 @@
 // #7108, #7102, #7101, #7621, #9580, #9930).
 
 import { describe, it, expect } from 'vitest';
-import { createLoader, createSlotRefresh } from '../../frontend/js/load.js';
+import { createLoader, createSlotRefresh } from '../../../frontend/js/load.js';
 
 const TODAY = { slots: [{ datetime: '2026-07-18T00:00:00.000Z' }] };
 const NOW = { slot: { priceWithTax: 0.05 } };

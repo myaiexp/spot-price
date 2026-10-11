@@ -3,9 +3,9 @@
 // the success path: week caption, Monday-first labels, cell tooltips (#9931).
 
 import { describe, it, expect, afterEach } from 'vitest';
-import { renderHeatmap, showHeatmapError } from '../../frontend/js/heatmap.js';
-import { state } from '../../frontend/js/state.js';
-import { fakeDocument, fakeEl } from './test-support/fake-dom.js';
+import { renderHeatmap, showHeatmapError } from '../../../frontend/js/heatmap.js';
+import { state } from '../../../frontend/js/state.js';
+import { fakeDocument, fakeEl } from '../test-support/fake-dom.js';
 
 function resetState() {
   state.heatmap = null;

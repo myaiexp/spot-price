@@ -1,5 +1,5 @@
 // Tests for the insight cards' pure state logic
-// (../../frontend/js/insights-calc.js): now-index resolution per tab and the
+// (../../../frontend/js/insights-calc.js): now-index resolution per tab and the
 // three card texts.
 //
 // This layer had no coverage (audit #5552) while it passed currentIdx = 0 for
@@ -8,8 +8,8 @@
 // day's window on screen after a tab switch.
 
 import { describe, it, expect } from 'vitest';
-import { insightCurrentIndex, insightCards } from '../../frontend/js/insights-calc.js';
-import { stepSlots } from './test-support/rows.js';
+import { insightCurrentIndex, insightCards } from '../../../frontend/js/insights-calc.js';
+import { stepSlots } from '../test-support/rows.js';
 
 // 15-min slots stepping from a UTC start. Winter (EET, UTC+2) so wall-clock
 // labels are the UTC time + 2h with no DST edge in play. Prices are EUR/kWh.

@@ -4,10 +4,10 @@
 // are placeholders. A { document, nowMs } deps bag lets us copy-test without jsdom.
 
 import { describe, it, expect, afterEach } from 'vitest';
-import { renderInsights } from '../../frontend/js/insights.js';
-import { state } from '../../frontend/js/state.js';
-import { stepSlots } from './test-support/rows.js';
-import { fakeDocument, fakeEl } from './test-support/fake-dom.js';
+import { renderInsights } from '../../../frontend/js/insights.js';
+import { state } from '../../../frontend/js/state.js';
+import { stepSlots } from '../test-support/rows.js';
+import { fakeDocument, fakeEl } from '../test-support/fake-dom.js';
 
 const SHORT = stepSlots('2026-01-15T12:00:00.000Z', [0.3, 0.3, 0.3]);
 const NOW_MS = Date.parse('2026-01-15T12:05:00.000Z');

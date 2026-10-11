@@ -1,4 +1,4 @@
-// Tests for the frontend's pure slot/time helpers (../../frontend/js/slot-time.js):
+// Tests for the frontend's pure slot/time helpers (../../../frontend/js/slot-time.js):
 // Helsinki wall-clock extraction, wall-clock → epoch (DST gap and fold), and
 // datetime-derived slot indexing, including the past-the-end boundary extrapolation.
 
@@ -17,8 +17,8 @@ import {
   exclusiveEndMs,
   slotsOf,
   hasSlots,
-} from '../../frontend/js/slot-time.js';
-import { slot } from './test-support/rows.js';
+} from '../../../frontend/js/slot-time.js';
+import { slot } from '../test-support/rows.js';
 
 describe('toDate', () => {
   it('passes a Date through', () => {
