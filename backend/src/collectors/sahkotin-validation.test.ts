@@ -6,6 +6,10 @@ import { stubFetch, okJson } from '../test-support/fetch-stub.js';
 
 const RANGE = ['2024-01-01T00:00:00Z', '2024-01-31T00:00:00Z'] as const;
 
+// goodSlot() is 2024-01-01T00:00Z onward. That instant is the inclusive start of
+// the 30-day chunk ending here, so the half-open write filter keeps those rows.
+const GOOD_SLOT_WINDOW_END = new Date('2024-01-31T00:00:00.000Z');
+
 function goodSlot(hour: number, value = 50) {
   return { date: `2024-01-01T${String(hour).padStart(2, '0')}:00:00Z`, value };
 }
@@ -101,14 +105,16 @@ describe('backfillPrices malformed chunks (finding #7131, finding #7116)', () =>
       .mockResolvedValueOnce(okJson({
         prices: [goodSlot(0, 50), { ...goodSlot(1), date: '' }, goodSlot(2, 40)],
       }))
-      .mockResolvedValueOnce(okJson({ prices: [goodSlot(0, 30)] }))
+      // The next chunk ends at 2024-01-01T00:00Z, so goodSlot(0) would be the
+      // exclusive bound and get dropped. This instant is inside that window.
+      .mockResolvedValueOnce(okJson({ prices: [{ date: '2023-12-15T12:00:00Z', value: 30 }] }))
       .mockResolvedValueOnce(okJson({ prices: [] }));
     vi.stubGlobal('fetch', fetchMock);
     vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const { db, state } = countingDb();
 
-    await backfillPrices(db, { maxChunks: 1000, requestDelayMs: 0 });
+    await backfillPrices(db, { walkBackFrom: GOOD_SLOT_WINDOW_END, maxChunks: 1000, requestDelayMs: 0 });
 
     // Two non-empty chunks (mixed then valid), then empty → walk did not halt
     // on the dropped rows. countingDb's rowCount is per-insert (not per-slot),
@@ -129,7 +135,7 @@ describe('backfillPrices malformed chunks (finding #7131, finding #7116)', () =>
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const { db, captured } = capturingDb();
 
-    await backfillPrices(db, { maxChunks: 1000, requestDelayMs: 0 });
+    await backfillPrices(db, { walkBackFrom: GOOD_SLOT_WINDOW_END, maxChunks: 1000, requestDelayMs: 0 });
 
     const rows = captured.rows as Array<{ datetime: string }>;
     expect(rows).toHaveLength(2);
@@ -145,7 +151,7 @@ describe('backfillPrices malformed chunks (finding #7131, finding #7116)', () =>
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const { db, state } = countingDb();
 
-    await expect(backfillPrices(db, { maxChunks: 1000, requestDelayMs: 0 }))
+    await expect(backfillPrices(db, { walkBackFrom: GOOD_SLOT_WINDOW_END, maxChunks: 1000, requestDelayMs: 0 }))
       .rejects.toThrow(/no valid slots/i);
     expect(state.inserts).toBe(1); // the good chunk committed; we did not swallow the next
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -162,7 +168,7 @@ describe('backfillPrices write-path conversion (finding #7132, finding #9575)', 
     vi.spyOn(console, 'log').mockImplementation(() => {});
     const { db, captured } = capturingDb();
 
-    await backfillPrices(db, { maxChunks: 1000, requestDelayMs: 0 });
+    await backfillPrices(db, { walkBackFrom: GOOD_SLOT_WINDOW_END, maxChunks: 1000, requestDelayMs: 0 });
 
     // 2024-01-01 is in the 24% period: 50 €/MWh → 0.05 €/kWh → 0.062 with VAT.
     expect(captured.rows).toEqual([
@@ -178,30 +184,53 @@ describe('backfillPrices write-path conversion (finding #7132, finding #9575)', 
 
   it("taxes each slot at its own date's VAT rate, not today's (finding #9575)", async () => {
     // Literal expected strings, not re-derived through applyVat, so a wrong
-    // rate table cannot pass by agreeing with itself.
-    const slots = [
-      { date: '2025-01-15T10:00:00Z', value: 100 }, // 25.5%
-      { date: '2023-01-15T10:00:00Z', value: 100 }, // temporary 10%
-      { date: '2018-06-15T10:00:00Z', value: 100 }, // 24%
-      { date: '2024-08-31T22:00:00Z', value: 100 }, // 01:00 Helsinki 1 Sep 2024 → 25.5%
-      { date: '2012-12-31T21:00:00Z', value: 100 }, // 23:00 Helsinki 31 Dec 2012 → 23%
-    ];
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce(okJson({ prices: slots }))
-      .mockResolvedValueOnce(okJson({ prices: [] }));
-    vi.stubGlobal('fetch', fetchMock);
+    // rate table cannot pass by agreeing with itself. The half-open filter
+    // only upserts slots inside the chunk window, and these eras do not share
+    // a 30-day window — each is walked from the hour after its own instant.
+    // The two August 2024 slots share one chunk and straddle Helsinki midnight
+    // (24% → 25.5%), so one rate for the whole chunk would fail.
     vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const alone: Array<[string, string]> = [
+      ['2025-01-15T10:00:00Z', '0.12550'], // 25.5%
+      ['2023-01-15T10:00:00Z', '0.11000'], // temporary 10%
+      ['2018-06-15T10:00:00Z', '0.12400'], // 24%
+      ['2012-12-31T21:00:00Z', '0.12300'], // 23:00 Helsinki 31 Dec 2012 → 23%
+    ];
+    for (const [date, priceWithTax] of alone) {
+      const walkBackFrom = new Date(new Date(date).getTime() + 60 * 60 * 1000);
+      vi.stubGlobal('fetch', vi.fn()
+        .mockResolvedValueOnce(okJson({ prices: [{ date, value: 100 }] }))
+        .mockResolvedValueOnce(okJson({ prices: [] })));
+      const { db, captured } = capturingDb();
+
+      await backfillPrices(db, { walkBackFrom, maxChunks: 10, requestDelayMs: 0 });
+
+      expect(captured.rows).toEqual([{ datetime: date, priceNoTax: '0.10000', priceWithTax }]);
+    }
+
+    const boundary = [
+      { date: '2024-08-31T20:00:00Z', priceWithTax: '0.12400' }, // 23:00 Helsinki 31 Aug → 24%
+      { date: '2024-08-31T22:00:00Z', priceWithTax: '0.12550' }, // 01:00 Helsinki 1 Sep → 25.5%
+    ];
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(okJson({
+        prices: boundary.map((slot) => ({ date: slot.date, value: 100 })),
+      }))
+      .mockResolvedValueOnce(okJson({ prices: [] })));
     const { db, captured } = capturingDb();
 
-    await backfillPrices(db, { maxChunks: 1000, requestDelayMs: 0 });
+    await backfillPrices(db, {
+      walkBackFrom: new Date('2024-09-01T00:00:00.000Z'),
+      maxChunks: 10,
+      requestDelayMs: 0,
+    });
 
-    const rows = captured.rows as Array<{ datetime: string; priceNoTax: string; priceWithTax: string }>;
-    expect(rows.map((r) => [r.datetime, r.priceNoTax, r.priceWithTax])).toEqual([
-      ['2025-01-15T10:00:00Z', '0.10000', '0.12550'],
-      ['2023-01-15T10:00:00Z', '0.10000', '0.11000'],
-      ['2018-06-15T10:00:00Z', '0.10000', '0.12400'],
-      ['2024-08-31T22:00:00Z', '0.10000', '0.12550'],
-      ['2012-12-31T21:00:00Z', '0.10000', '0.12300'],
-    ]);
+    expect(captured.rows).toEqual(boundary.map((slot) => ({
+      datetime: slot.date,
+      priceNoTax: '0.10000',
+      priceWithTax: slot.priceWithTax,
+    })));
   });
 });

@@ -4,7 +4,8 @@
 // (so live spot-hinta owns Helsinki today), but callers may pass `walkBackFrom`
 // to resume from an earlier boundary instead of re-walking the whole history.
 // These tests pin the first fetch window's `end` (= the bound) and `start`
-// (= bound − 30 days) for both the default and the explicit-walkBackFrom cases.
+// (= bound − 30 days) for both the default and the explicit-walkBackFrom cases,
+// and that chunk N+1's `end` equals chunk N's `start` (finding #12149).
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { backfillPrices } from './sahkotin.js';
 import { okJson } from '../test-support/fetch-stub.js';
@@ -14,12 +15,23 @@ import { getHelsinkiToday, getHelsinkiDateRange } from '../utils/helsinki-time.j
 // One affected row per chunk — this file never asserts on the count.
 const countingDb = () => makeInsertDb(1);
 
-// First chunk has data, second is empty → the walk stops after exactly one fetch
-// window, so calls[0] is the window anchored at the upper bound under test.
+function requestedWindow(url: string): { start: string; end: string } {
+  const params = new URL(url).searchParams;
+  return { start: params.get('start') ?? '', end: params.get('end') ?? '' };
+}
+
+// First chunk has one in-window slot, second is empty → the walk stops after
+// exactly one fetch window, so calls[0] is the window anchored at the bound.
+// The slot is derived from the requested `end` so the half-open filter keeps
+// it (a fixed historical date would be dropped and is not what these tests pin).
 function stubOneChunkThenEmpty() {
-  const fetchMock = vi.fn()
-    .mockResolvedValueOnce(okJson({ prices: [{ date: '2020-01-01T00:00:00Z', value: 50 }] }))
-    .mockResolvedValueOnce(okJson({ prices: [] }));
+  let chunks = 0;
+  const fetchMock = vi.fn(async (url: string) => {
+    chunks += 1;
+    if (chunks > 1) return okJson({ prices: [] });
+    const endMs = new Date(requestedWindow(url).end).getTime();
+    return okJson({ prices: [{ date: new Date(endMs - 60 * 60 * 1000).toISOString(), value: 50 }] });
+  });
   vi.stubGlobal('fetch', fetchMock);
   vi.spyOn(console, 'log').mockImplementation(() => {});
   return fetchMock;
@@ -115,5 +127,29 @@ describe('backfillPrices walkBackFrom exclusive upper bound', () => {
     expect(firstUrl).toContain(
       `end=${encodeURIComponent('2026-01-14T22:00:00.000Z')}`,
     );
+  });
+
+  it('abuts successive chunks: next end equals previous start, each 30 days wide (finding #12149)', async () => {
+    let chunks = 0;
+    const fetchMock = vi.fn(async (url: string) => {
+      chunks += 1;
+      if (chunks > 2) return okJson({ prices: [] });
+      const endMs = new Date(requestedWindow(url).end).getTime();
+      return okJson({ prices: [{ date: new Date(endMs - 60 * 60 * 1000).toISOString(), value: 40 }] });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const walkBackFrom = new Date('2020-06-15T00:00:00.000Z');
+
+    await backfillPrices(countingDb(), { walkBackFrom, requestDelayMs: 0 });
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    const windows = fetchMock.mock.calls.map((call) => requestedWindow(call[0] as string));
+    for (let i = 0; i < windows.length - 1; i++) {
+      expect(windows[i + 1].end).toBe(windows[i].start);
+    }
+    for (const window of windows) {
+      expect(new Date(window.end).getTime() - new Date(window.start).getTime()).toBe(CHUNK_MS);
+    }
   });
 });

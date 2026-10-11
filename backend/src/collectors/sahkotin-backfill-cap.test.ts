@@ -8,6 +8,15 @@ import { backfillPrices, backfillMaxChunks } from './sahkotin.js';
 import { okJson } from '../test-support/fetch-stub.js';
 import { makeCountingInsertDb as countingDb } from '../test-support/fake-db.js';
 
+// A fixed historical instant is outside whatever chunk "today" walks, and the
+// half-open filter then upserts nothing. Pin the cap against a slot that is
+// actually inside the window just requested.
+function inWindowSlot(url: string) {
+  const end = new URL(url).searchParams.get('end');
+  const date = new Date(new Date(end ?? '').getTime() - 60 * 60 * 1000).toISOString();
+  return { date, value: 50 };
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -17,7 +26,7 @@ describe('backfill runaway safety cap (audit #2985)', () => {
   it('throws after exactly maxChunks when the upstream never empties out', async () => {
     // sahkotin.fi always returns a non-empty chunk → natural termination never
     // happens, so only the cap can stop the loop.
-    const fetchMock = vi.fn(async () => okJson({ prices: [{ date: '2020-01-01T00:00:00Z', value: 50 }] }));
+    const fetchMock = vi.fn(async (url: string) => okJson({ prices: [inWindowSlot(url)] }));
     vi.stubGlobal('fetch', fetchMock);
     vi.spyOn(console, 'log').mockImplementation(() => {});
     const { db, state } = countingDb();
@@ -33,9 +42,12 @@ describe('backfill runaway safety cap (audit #2985)', () => {
   it('terminates normally on an empty upstream chunk, never reaching the cap', async () => {
     // First chunk has data, second is empty → the loop stops at the empty chunk,
     // proving the cap does not change normal backfill termination.
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce(okJson({ prices: [{ date: '2020-01-01T00:00:00Z', value: 50 }] }))
-      .mockResolvedValueOnce(okJson({ prices: [] }));
+    let chunks = 0;
+    const fetchMock = vi.fn(async (url: string) => {
+      chunks += 1;
+      if (chunks > 1) return okJson({ prices: [] });
+      return okJson({ prices: [inWindowSlot(url)] });
+    });
     vi.stubGlobal('fetch', fetchMock);
     vi.spyOn(console, 'log').mockImplementation(() => {});
     const { db, state } = countingDb();

@@ -30,13 +30,19 @@ describe('backfillPrices fetch-error propagation (audit #3967)', () => {
     // First chunk OK (and upserted), second chunk fails → the loop must reject
     // mid-walk, not stop quietly as if it had reached the start of history.
     const fetchMock = vi.fn()
-      .mockResolvedValueOnce(okJson({ prices: [{ date: '2024-01-01T00:00:00Z', value: 50 }] }))
+      .mockResolvedValueOnce(okJson({ prices: [{ date: '2024-01-15T00:00:00Z', value: 50 }] }))
       .mockResolvedValueOnce(failed(500, 'Internal Server Error'));
     vi.stubGlobal('fetch', fetchMock);
     vi.spyOn(console, 'log').mockImplementation(() => {});
     const { db, state } = countingDb();
 
-    await expect(backfillPrices(db, { maxChunks: 1000, requestDelayMs: 0 }))
+    // 2024-01-15 sits inside the 30-day chunk ending here, so the good chunk
+    // is actually upserted (an out-of-window slot would skip the insert).
+    await expect(backfillPrices(db, {
+      walkBackFrom: new Date('2024-01-31T00:00:00.000Z'),
+      maxChunks: 1000,
+      requestDelayMs: 0,
+    }))
       .rejects.toThrow('sahkotin.fi API error: 500 Internal Server Error');
     expect(state.inserts).toBe(1); // exactly the one good chunk was written
     expect(fetchMock).toHaveBeenCalledTimes(2);

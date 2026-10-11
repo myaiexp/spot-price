@@ -69,6 +69,22 @@ function isValidSahkotinSlot(slot: unknown): slot is SahkotinSlot {
   );
 }
 
+/**
+ * Slots whose instant lies in [start, end). The request asks sahkotin.fi for
+ * that half-open window, but the response is not checked. A slot at exactly
+ * `end` — an inclusive upstream end — would overwrite the live collector's
+ * row on the first chunk (Helsinki today 00:00). Instants, not strings, so
+ * `+03:00` and `Z` forms of the same moment compare equal.
+ */
+function slotsInHalfOpenWindow(slots: SahkotinSlot[], start: Date, end: Date): SahkotinSlot[] {
+  const startMs = start.getTime();
+  const endMs = end.getTime();
+  return slots.filter((slot) => {
+    const t = new Date(slot.date).getTime();
+    return t >= startMs && t < endMs;
+  });
+}
+
 export async function fetchSahkotinPrices(start: string, end: string): Promise<SahkotinSlot[]> {
   const url = `${SAHKOTIN_PRICES_URL}?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
   const raw = await fetchUpstreamJson(url, SAHKOTIN_SOURCE);
@@ -115,11 +131,13 @@ export async function backfillPrices(
 
   // `end` is the EXCLUSIVE upper bound of the fetch window; the walk moves
   // backwards from here. It defaults to Helsinki local midnight of the current
-  // Helsinki day — so the most recent slot fetched is Helsinki yesterday's last
+  // Helsinki day — so the most recent slot kept is Helsinki yesterday's last
   // hour, and Helsinki today/tomorrow stay owned by the live collectPrices job
   // (spot-hinta.fi TodayAndDayForward, every 15 min). UTC midnight would be
   // 02:00/03:00 Helsinki and would overwrite early-today hour-start rows with
   // sahkotin hourly values while :15/:30/:45 quarters remain (mixed granularity).
+  // The URL is not the enforcement: slots outside [start, end) are dropped
+  // before upsert, so an inclusive upstream `end` cannot write the bound.
   // Do NOT subtract a day — the bound is a precise instant, not a date, so doing
   // so would drop most of yesterday's data. Callers may pass `walkBackFrom` to
   // resume from an earlier boundary; we clone it so the reassignment below never
@@ -146,25 +164,39 @@ export async function backfillPrices(
 
     const slots = await fetchSahkotinPrices(start.toISOString(), end.toISOString());
 
+    // Empty `prices` is end of history. Valid slots that all fall outside
+    // [start, end) are not: stopping would truncate everything older than
+    // this chunk when the upstream's only extra row is the exclusive bound.
     if (slots.length === 0) {
       console.log('No more data available, stopping.');
       break;
     }
 
-    const values = slots.map((slot) => {
-      const noTax = mwhToKwh(slot.value);
-      // The rate in force on the slot's own date — history spans 23%/24%/10%/25.5%.
-      const withTax = applyVat(noTax, new Date(slot.date));
-      return makePriceInsert(slot.date, noTax, withTax);
-    });
+    const inWindow = slotsInHalfOpenWindow(slots, start, end);
+    const dropped = slots.length - inWindow.length;
+    if (dropped > 0) {
+      console.warn(
+        `Dropped ${dropped} sahkotin.fi slot(s) outside [${start.toISOString()}, ${end.toISOString()})`,
+      );
+    }
 
-    const result = await upsertPrices(db, values);
+    if (inWindow.length > 0) {
+      const values = inWindow.map((slot) => {
+        const noTax = mwhToKwh(slot.value);
+        // The rate in force on the slot's own date — history spans 23%/24%/10%/25.5%.
+        const withTax = applyVat(noTax, new Date(slot.date));
+        return makePriceInsert(slot.date, noTax, withTax);
+      });
 
-    const upserted = result.rowCount ?? 0;
-    totalUpserted += upserted;
-    console.log(`  Upserted ${upserted} rows (total: ${totalUpserted})`);
+      const result = await upsertPrices(db, values);
 
-    // Move window backwards
+      const upserted = result.rowCount ?? 0;
+      totalUpserted += upserted;
+      console.log(`  Upserted ${upserted} rows (total: ${totalUpserted})`);
+    }
+
+    // Next chunk's exclusive end is this chunk's start. Shifting it further
+    // back leaves a gap at every 30-day boundary.
     end = start;
     chunkIndex++;
 

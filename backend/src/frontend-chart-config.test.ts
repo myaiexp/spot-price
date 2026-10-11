@@ -1,7 +1,8 @@
 // Tests for the Chart.js config builder (../../frontend/js/chart-config.js,
 // finding #9586, finding #9928): bar vs area branches (bar type, no fill, ghost
 // stays a line overlay), ghost omitted when empty, x tick stride per resolution,
-// y/tooltip callbacks, reduced motion, and fresh option objects per call.
+// y/tooltip callbacks, the primary gradient (bar vs area, and the no-chartArea
+// fallback), reduced motion, and fresh option objects per call.
 
 import { describe, it, expect } from 'vitest';
 import { buildChartConfig } from '../../frontend/js/chart-config.js';
@@ -110,6 +111,56 @@ describe('buildChartConfig callbacks', () => {
     expect(title([{ label: '03:00' }])).toBe('03:00');
     expect(label({ dataset: { label: 'Tänään' }, parsed: { y: 7.5 } })).toBe('Tänään: 7.50 c/kWh');
     expect(label({ dataset: { label: 'Eilen' }, parsed: { y: null } })).toBe('Eilen: —');
+  });
+});
+
+describe('buildChartConfig gradient fill (finding #12156)', () => {
+  function paint(isBar: boolean, chartArea: { top: number; bottom: number } | undefined) {
+    const stops: Array<[number, string]> = [];
+    let line: number[] | null = null;
+    const ctx = {
+      createLinearGradient(x0: number, y0: number, x1: number, y1: number) {
+        line = [x0, y0, x1, y1];
+        return {
+          addColorStop(offset: number, color: string) {
+            stops.push([offset, color]);
+          },
+        };
+      },
+    };
+    const config = build({ isBar });
+    const backgroundColor = config.data.datasets[0].backgroundColor as (context: {
+      chart: { ctx: typeof ctx; chartArea: typeof chartArea };
+    }) => unknown;
+    const painted = backgroundColor({ chart: { ctx, chartArea } });
+    return { painted, stops, line };
+  }
+
+  it('uses a flat amber while chartArea is not laid out yet', () => {
+    const { painted, stops, line } = paint(false, undefined);
+    expect(painted).toBe('rgba(232, 163, 8, 0.3)');
+    expect(stops).toEqual([]);
+    expect(line).toBeNull();
+  });
+
+  it('bar gradient is opaque green → amber → red, bottom to top', () => {
+    const { stops, line } = paint(true, { top: 12, bottom: 180 });
+    expect(line).toEqual([0, 180, 0, 12]);
+    expect(stops).toEqual([
+      [0, 'rgba(34, 197, 94, 0.85)'],
+      [0.5, 'rgba(232, 163, 8, 0.75)'],
+      [1, 'rgba(239, 68, 68, 0.85)'],
+    ]);
+  });
+
+  it('area gradient is the same stops at the translucent alphas', () => {
+    const { stops, line } = paint(false, { top: 12, bottom: 180 });
+    expect(line).toEqual([0, 180, 0, 12]);
+    expect(stops).toEqual([
+      [0, 'rgba(34, 197, 94, 0.35)'],
+      [0.5, 'rgba(232, 163, 8, 0.25)'],
+      [1, 'rgba(239, 68, 68, 0.3)'],
+    ]);
   });
 });
 

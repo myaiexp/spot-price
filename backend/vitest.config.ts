@@ -14,14 +14,14 @@ export default defineConfig({
       allowExternal: true,
       include: ['src/**/*.ts', `${FRONTEND_JS}/**/*.js`],
       exclude: ['**/*.test.ts', 'src/test-support/**'],
-      // Ratchet: whole-suite coverage on 2026-10-11 (reporter 95.94 / 90.92 /
-      // 96.01 / 97.11), stored at 0.1 resolution so reporter rounding cannot
+      // Ratchet: whole-suite coverage on 2026-10-11 (reporter 97.44 / 92.41 /
+      // 97.07 / 98.54), stored at 0.1 resolution so reporter rounding cannot
       // fail the next run. Raise when coverage grows; never lower to pass.
       thresholds: {
-        statements: 95.9,
-        branches: 90.9,
-        functions: 96,
-        lines: 97.1,
+        statements: 97.4,
+        branches: 92.4,
+        functions: 97,
+        lines: 98.5,
       },
     },
   },
