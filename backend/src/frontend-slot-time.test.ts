@@ -12,6 +12,7 @@ import {
   helsinkiDateKey,
   findSlotContaining,
   slotBoundaryMs,
+  exclusiveEndMs,
   slotsOf,
   hasSlots,
 } from '../../frontend/js/slot-time.js';
@@ -104,6 +105,30 @@ describe('slotBoundaryMs', () => {
     // not the clamped last-slot start.
     expect(slotBoundaryMs(slots, 3)).toBe(t0 + 45 * 60 * 1000);
     expect(slotBoundaryMs(slots, 4)).toBe(t0 + 60 * 60 * 1000);
+  });
+});
+
+describe('exclusiveEndMs', () => {
+  const t0 = Date.parse('2026-07-18T12:00:00Z');
+  const dense = [
+    slot('2026-07-18T12:00:00Z'),
+    slot('2026-07-18T12:15:00Z'),
+    slot('2026-07-18T12:30:00Z'),
+  ];
+
+  it('is the next slot start on a dense grid, including the slot past the array', () => {
+    expect(exclusiveEndMs(dense, 1)).toBe(t0 + 15 * 60 * 1000);
+    expect(exclusiveEndMs(dense, 3)).toBe(t0 + 45 * 60 * 1000);
+  });
+
+  it('stays one quarter-hour after the last included slot across a hole (finding #12151)', () => {
+    const gapped = [slot('2026-07-18T12:00:00Z'), slot('2026-07-18T12:15:00Z'), slot('2026-07-18T12:45:00Z')];
+    // Index 2 starts at 12:45. The window that stops before it ends at 12:30.
+    expect(exclusiveEndMs(gapped, 2)).toBe(t0 + 30 * 60 * 1000);
+  });
+
+  it('keeps extrapolating when the index is more than one past the array', () => {
+    expect(exclusiveEndMs(dense, 4)).toBe(slotBoundaryMs(dense, 4));
   });
 });
 

@@ -67,6 +67,20 @@ export function slotBoundaryMs(slots, idx, slotDurationMs = SLOT_MS) {
   return lastMs + (idx - (slots.length - 1)) * slotDurationMs;
 }
 
+// Instant an exclusive window ends. On a dense grid this is the next slot's
+// start, same as slotBoundaryMs. Across a missing slot — or past the array —
+// it is one quarter-hour after the last included slot. That slot's price stops
+// then, not at the far side of the hole (finding #12151).
+export function exclusiveEndMs(slots, endExclusive, slotDurationMs = SLOT_MS) {
+  if (endExclusive > 0 && endExclusive <= slots.length) {
+    const prevEnd = Date.parse(slots[endExclusive - 1].datetime) + slotDurationMs;
+    if (endExclusive === slots.length) return prevEnd;
+    const nextStart = Date.parse(slots[endExclusive].datetime);
+    return nextStart - prevEnd === 0 ? nextStart : prevEnd;
+  }
+  return slotBoundaryMs(slots, endExclusive, slotDurationMs);
+}
+
 // A day payload's slots array, or [] when the payload (or its slots) is missing
 // — a 404'd tomorrow or a failed yesterday arrives as null. The one place the
 // `{ slots }` day shape is read; every caller goes through this or hasSlots.

@@ -1,7 +1,7 @@
 // Pure insight-card state: now-index resolution and the three card texts.
 
 import { findCheapestBlock, findNextCheapWindow, findPeakBlock } from './calc.js';
-import { formatCents, slotBoundaryLabel, slotSpanLabel } from './format.js';
+import { exclusiveEndLabel, formatCents, slotBoundaryLabel, slotSpanLabel } from './format.js';
 import { findSlotContaining, slotBoundaryMs, SLOT_MS } from './slot-time.js';
 
 // Shown when a card has nothing to say (no data / no window).
@@ -38,7 +38,7 @@ function nextCard(slots, currentIdx) {
   if (next.inCheapNow) {
     return {
       value: 'Nyt!',
-      detail: `Olet halvassa jaksossa (→ ${slotBoundaryLabel(slots, next.endExclusive)})`,
+      detail: `Olet halvassa jaksossa (→ ${exclusiveEndLabel(slots, next.endExclusive)})`,
     };
   }
 

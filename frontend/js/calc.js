@@ -6,31 +6,18 @@
 // named `endExclusive` (one past the last included slot), matching
 // estimator-calc.js. The name carries the semantics on purpose — an `endIndex`
 // that was inclusive here and exclusive there was a standing off-by-one trap for
-// new consumers (audit #5565). An exclusive end also feeds slotBoundaryMs /
-// slotBoundaryLabel directly, which is what every call site wants.
+// new consumers (audit #5565). An exclusive end feeds slotBoundaryMs on a dense
+// grid and exclusiveEndMs when a missing slot would put the next index on the
+// far side of the hole.
 
-import { helsinkiHourMinute, helsinkiMinutesOfDay, HOUR_MS } from './slot-time.js';
-
-// First index of the minimum value (ties → earliest), matching the original
-// strict-`<` scan bookkeeping.
-export function argMin(arr) {
-  let best = 0;
-  for (let i = 1; i < arr.length; i++) if (arr[i] < arr[best]) best = i;
-  return best;
-}
-
-// First index of the maximum value (ties → earliest).
-export function argMax(arr) {
-  let best = 0;
-  for (let i = 1; i < arr.length; i++) if (arr[i] > arr[best]) best = i;
-  return best;
-}
+import { helsinkiHourMinute, helsinkiMinutesOfDay, HOUR_MS, SLOT_MS } from './slot-time.js';
 
 // Sliding-window sums of priceWithTax: sums[i] = Σ slots[i .. i+windowSize) for
 // every start i in [0, endExclusive-windowSize]. endExclusive is one past the
 // last slot a window may include (same bound as the public window fields). One
-// prefix-sum pass (O(n)) shared by both the cheapest-block and optimal-window
-// scans, so the window bookkeeping lives in exactly one place.
+// prefix-sum pass (O(n)). This is an index sum — a missing slot still produces
+// a number. Duration finders go through pickContiguousWindow, which drops
+// starts whose slots are not adjacent quarter-hours.
 export function windowSums(slots, windowSize, endExclusive = slots.length) {
   const end = Math.min(endExclusive, slots.length);
   const count = end - windowSize + 1;
@@ -50,15 +37,46 @@ export function priceThreshold(slots, fraction) {
   return prices[Math.floor(prices.length * fraction)];
 }
 
-// Cheapest contiguous block of `blockSize` slots (default 2h = 8 quarter-hours).
+// Every step from slots[from] through slots[to] (both ends included) is one
+// quarter-hour of UTC. Helsinki wall-clock is the wrong measure: on the
+// spring-forward morning, 02:45 EET and 04:00 EEST are still 15 minutes apart
+// and that hour is a real hour of electricity. A missing slot is a longer step.
+function stepsAreAdjacent(slots, from, to) {
+  for (let i = from; i < to; i++) {
+    if (Date.parse(slots[i + 1].datetime) - Date.parse(slots[i].datetime) !== SLOT_MS) return false;
+  }
+  return true;
+}
+
+// Cheapest and dearest index-windows of `windowSize` whose slots are adjacent
+// quarter-hours. A missing slot makes an index window longer on the clock than
+// `windowSize` quarters, so that start is not a candidate (finding #12151).
+// Ties keep the earliest start (strict < for the cheapest, strict > for the
+// dearest). Null when none fit — including when the array is long enough but
+// every candidate crosses a hole.
+export function pickContiguousWindow(slots, windowSize, endExclusive = slots.length) {
+  const sums = windowSums(slots, windowSize, endExclusive);
+  let minStart = -1;
+  let maxStart = -1;
+  for (let i = 0; i < sums.length; i++) {
+    if (!stepsAreAdjacent(slots, i, i + windowSize - 1)) continue;
+    if (minStart === -1 || sums[i] < sums[minStart]) minStart = i;
+    if (maxStart === -1 || sums[i] > sums[maxStart]) maxStart = i;
+  }
+  if (minStart === -1) return null;
+  return { minStart, maxStart, minSum: sums[minStart], maxSum: sums[maxStart] };
+}
+
+// Cheapest time-contiguous block of `blockSize` slots (default 2h = 8
+// quarter-hours). "Contiguous" is wall-clock, not array position.
 export function findCheapestBlock(slots, blockSize = 8) {
   if (!slots || slots.length < blockSize) return null;
-  const sums = windowSums(slots, blockSize);
-  const bestStart = argMin(sums);
+  const pick = pickContiguousWindow(slots, blockSize);
+  if (!pick) return null;
   return {
-    startIndex: bestStart,
-    endExclusive: bestStart + blockSize,
-    avgPrice: sums[bestStart] / blockSize,
+    startIndex: pick.minStart,
+    endExclusive: pick.minStart + blockSize,
+    avgPrice: pick.minSum / blockSize,
   };
 }
 
@@ -73,29 +91,45 @@ export function findNextCheapWindow(slots, currentIndex) {
 
   const inRange = currentIndex >= 0 && currentIndex < slots.length;
   if (inRange && slots[currentIndex].priceWithTax <= threshold) {
-    let endIdx = currentIndex;
-    while (endIdx < slots.length && slots[endIdx].priceWithTax <= threshold) endIdx++;
+    // Stop at a missing slot. The next array element can be cheap and still
+    // half an hour away; including it would call the hole part of this run.
+    let endIdx = currentIndex + 1;
+    while (
+      endIdx < slots.length &&
+      slots[endIdx].priceWithTax <= threshold &&
+      stepsAreAdjacent(slots, endIdx - 1, endIdx)
+    ) {
+      endIdx++;
+    }
     return { inCheapNow: true, endExclusive: endIdx };
   }
 
+  // Minutes from the current slot's start, not from the array distance. With a
+  // hole, (i - currentIndex) * 15 under-counts. No anchor (currentIndex outside
+  // the array) means there is no countdown — callers show a clock time instead.
+  const anchorMs = inRange ? Date.parse(slots[currentIndex].datetime) : NaN;
   for (let i = Math.max(0, currentIndex + 1); i < slots.length; i++) {
-    if (slots[i].priceWithTax <= threshold) {
-      return {
-        inCheapNow: false,
-        startIndex: i,
-        startsIn: (i - currentIndex) * 15,
-        price: slots[i].priceWithTax,
-      };
-    }
+    if (slots[i].priceWithTax > threshold) continue;
+    const startMs = Date.parse(slots[i].datetime);
+    if (!Number.isFinite(startMs)) continue;
+    return {
+      inCheapNow: false,
+      startIndex: i,
+      startsIn: Number.isFinite(anchorMs) ? Math.round((startMs - anchorMs) / 60_000) : null,
+      price: slots[i].priceWithTax,
+    };
   }
   return null;
 }
 
 // Longest run of above-threshold (60th-percentile) slots, bridging gaps of ≤2
-// below-threshold slots (30 min). Runs are {startIndex, endExclusive} through
-// collect / merge / pick so gap and length math stay on the same exclusive-end
-// convention as every other window in this module (audit #5565, #7122). avgPrice
-// spans the merged run, bridged dips included.
+// below-threshold slots (30 min) when those slots are actually adjacent
+// quarter-hours. A missing slot is not a dip we measured: index adjacency
+// would merge highs across the hole into a "1h" peak that runs longer than an
+// hour (finding #12151). Runs are {startIndex, endExclusive} through collect /
+// merge / pick so gap and length math stay on the same exclusive-end convention
+// as every other window in this module (audit #5565, #7122). avgPrice spans the
+// merged run, bridged dips included.
 export function findPeakBlock(slots) {
   if (!slots || slots.length === 0) return null;
   const threshold = priceThreshold(slots, 0.6);
@@ -104,11 +138,12 @@ export function findPeakBlock(slots) {
   let start = -1;
   for (let i = 0; i < slots.length; i++) {
     const above = slots[i].priceWithTax >= threshold;
-    if (above && start === -1) start = i;
-    else if (!above && start !== -1) {
+    const adjacent = i > 0 && stepsAreAdjacent(slots, i - 1, i);
+    if (start !== -1 && (!above || !adjacent)) {
       runs.push({ startIndex: start, endExclusive: i });
       start = -1;
     }
+    if (above && start === -1) start = i;
   }
   if (start !== -1) runs.push({ startIndex: start, endExclusive: slots.length });
   if (runs.length === 0) return null;
@@ -117,7 +152,8 @@ export function findPeakBlock(slots) {
   for (let i = 1; i < runs.length; i++) {
     const prev = merged[merged.length - 1];
     const gap = runs[i].startIndex - prev.endExclusive;
-    if (gap <= 2) prev.endExclusive = runs[i].endExclusive;
+    const adjacent = stepsAreAdjacent(slots, prev.endExclusive - 1, runs[i].startIndex);
+    if (gap <= 2 && adjacent) prev.endExclusive = runs[i].endExclusive;
     else merged.push({ ...runs[i] });
   }
 

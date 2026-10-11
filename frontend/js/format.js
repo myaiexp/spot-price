@@ -1,7 +1,7 @@
 // Display formatting: numeric cent conversion vs. cent *strings*, and Helsinki
 // wall-clock labels derived from slot datetimes.
 
-import { helsinkiHourMinute, slotBoundaryMs, toDate } from './slot-time.js';
+import { exclusiveEndMs, helsinkiHourMinute, slotBoundaryMs, toDate } from './slot-time.js';
 
 // Numeric EUR→cents (c/kWh) — a real number for arithmetic/charting. Kept
 // distinct from formatCents so no call site round-trips through a string.
@@ -52,9 +52,16 @@ export function slotBoundaryLabel(slots, idx) {
   return hhmm(hour, minute);
 }
 
+// Colon label for an exclusive window end. Matches slotBoundaryLabel on a dense
+// grid and past the array; across a hole it stays on the near side.
+export function exclusiveEndLabel(slots, endExclusive) {
+  const { hour, minute } = helsinkiHourMinute(exclusiveEndMs(slots, endExclusive));
+  return hhmm(hour, minute);
+}
+
 // Start–endExclusive window as a colon-form span. Both insight cards and the
 // estimator result cards go through this so they cannot drift in separator or
 // exclusive-end handling.
 export function slotSpanLabel(slots, startIndex, endExclusive) {
-  return `${slotBoundaryLabel(slots, startIndex)}–${slotBoundaryLabel(slots, endExclusive)}`;
+  return `${slotBoundaryLabel(slots, startIndex)}–${exclusiveEndLabel(slots, endExclusive)}`;
 }

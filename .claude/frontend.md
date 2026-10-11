@@ -1,6 +1,6 @@
 # Frontend
 
-No-build ES-module app: `frontend/index.html` (markup) + `frontend/styles.css` + `frontend/js/*.js` loaded via `<script type="module" src="./js/main.js">` (no inline boot — CSP `script-src` omits `'unsafe-inline'`). Chart.js from CDN. Design system is mase.fi's (near-black, golden-amber accent, Bricolage Grotesque + DM Sans). The `/porssi` nginx location sets the CSP; committed snippet is `deploy/nginx-porssi.conf`.
+No-build ES-module app: `frontend/index.html` (markup) + `frontend/styles.css` + `frontend/js/*.js` loaded via `<script type="module" src="./js/main.js">` (no inline boot — CSP `script-src` omits `'unsafe-inline'`). Chart.js from CDN. Design system is mase.fi's (near-black, golden-amber accent, Bricolage Grotesque + DM Sans). Self-hosted faces are generated from repo-root `fonts.json` into `frontend/fonts/` (`~/Projects/helm/scripts/webfonts fonts.json`). The manifest stays out of `frontend/` because deploy rsyncs that tree. The `/porssi` nginx location sets the CSP; committed snippet is `deploy/nginx-porssi.conf`.
 
 ## Module split
 
@@ -10,8 +10,8 @@ Pure math is side-effect-free and DOM-free. Render modules own the DOM. `main.js
 
 | File | Role |
 | --- | --- |
-| `js/calc.js` | Window sums, cheapest/next/peak blocks, EMA, wall-clock ghost alignment |
-| `js/estimator-calc.js` | Deadline minutes parse + resolution, slot assembly, optimal-window search, forward-slot filtering |
+| `js/calc.js` | Window sums, time-contiguous cheapest/next/peak blocks, EMA, wall-clock ghost alignment |
+| `js/estimator-calc.js` | Deadline minutes parse + resolution, slot assembly, time-contiguous optimal-window search, forward-slot filtering |
 | `js/slot-time.js` | Helsinki wall-clock + datetime→slot indexing (`toDate` coercion) |
 | `js/format.js` | Cents + Helsinki labels: `formatTime` is fi-FI prose (`14.30`); colon `slotLabel`/`hourLabel`/`slotBoundaryLabel`/`slotSpanLabel` for axes and window spans |
 | `js/hero-calc.js` | Cheap-rank → band/tint/copy |
@@ -53,4 +53,4 @@ Fetch failures stay in the fetch catch: `showError` only when there is no cached
 
 When Huomenna is disabled (no tomorrow slots) while it is the active tab — midnight rollover until ~14:00 — fall back to Tänään so the dashboard does not sit on empty cards.
 
-Window-bound and cheap-rank polarity rules: `.claude/windows.md`. Tests: `.claude/testing.md`.
+Window-bound, missing-slot, and cheap-rank polarity rules: `.claude/windows.md`. Tests: `.claude/testing.md`.

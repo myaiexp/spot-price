@@ -1,5 +1,5 @@
 {
-  "out": "fonts",
+  "out": "frontend/fonts",
   "families": [
     {"family": "Bricolage Grotesque", "source": "ofl/bricolagegrotesque", "weights": [600, 800]},
     {"family": "DM Sans", "source": "ofl/dmsans", "weights": [400, 600]}

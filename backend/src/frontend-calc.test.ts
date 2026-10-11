@@ -12,10 +12,11 @@ import {
   emaAggregate,
   alignSecondaryByWallClock,
 } from '../../frontend/js/calc.js';
-import { slot, stepSlots } from './test-support/rows.js';
+import { stepSlots } from './test-support/rows.js';
 
-const fromPrices = (prices: number[]) =>
-  prices.map((p, i) => slot(`2026-07-18T00:${i}`, p));
+// Real 15-min datetimes. `2026-07-18T00:${i}` was not a timestamp (`00:1`), so a
+// calc that reads datetime got NaN from these fixtures (finding #12151).
+const fromPrices = (prices: number[]) => stepSlots('2026-07-18T00:00:00.000Z', prices);
 
 // Index-as-price stepping — DST-day arrays key on sequence position, not a
 // specific price series. Test-specific shaping on top of shared stepSlots.
@@ -49,6 +50,21 @@ describe('findCheapestBlock', () => {
   it('returns null when fewer slots than the block size', () => {
     expect(findCheapestBlock(fromPrices([5]), 2)).toBeNull();
   });
+  it('skips a block whose slots are not adjacent quarter-hours (finding #12151)', () => {
+    // [1, 1, 9, 9] with the second slot removed: index window [1, 9] sums to 10
+    // but covers 30 min. The only real 2-slot block is the later [9, 9].
+    const slots = stepSlots('2026-01-15T12:00:00.000Z', [1, 1, 9, 9]).filter((_, i) => i !== 1);
+    expect(findCheapestBlock(slots, 2)).toEqual({ startIndex: 1, endExclusive: 3, avgPrice: 9 });
+  });
+  it('returns null when every block of that size crosses a hole (finding #12151)', () => {
+    const slots = stepSlots('2026-01-15T12:00:00.000Z', [1, 1, 1]).filter((_, i) => i !== 1);
+    expect(findCheapestBlock(slots, 2)).toBeNull();
+  });
+  it('still accepts the spring-forward hour: 02:45 EET and 04:00 EEST are 15 UTC minutes apart', () => {
+    // A Helsinki-minute check would call this a hole and drop the only 1h window.
+    const slots = stepSlots('2026-03-29T00:30:00.000Z', [1, 1, 1, 1]);
+    expect(findCheapestBlock(slots, 4)).toEqual({ startIndex: 0, endExclusive: 4, avgPrice: 1 });
+  });
 });
 
 describe('findNextCheapWindow', () => {
@@ -67,6 +83,31 @@ describe('findNextCheapWindow', () => {
   it('handles currentIndex = -1 (now before the first slot) without throwing', () => {
     const r = findNextCheapWindow(fromPrices([9, 1, 1]), -1); // threshold = 1
     expect(r).toMatchObject({ inCheapNow: false, startIndex: 1 });
+  });
+  it('counts startsIn in wall-clock minutes across a missing slot (finding #12151)', () => {
+    // 14:00, 14:15, [14:30 missing], 14:45 cheap. Index delta 2 is 30 min;
+    // the cheap slot starts 45 min after the current one.
+    const slots = stepSlots('2026-01-15T12:00:00.000Z', [9, 9, 9, 1, 1, 1]).filter((_, i) => i !== 2);
+    expect(findNextCheapWindow(slots, 0)).toEqual({
+      inCheapNow: false,
+      startIndex: 2,
+      startsIn: 45,
+      price: 1,
+    });
+  });
+  it('ends the current cheap run at a missing slot instead of jumping the hole (finding #12151)', () => {
+    const slots = stepSlots('2026-01-15T12:00:00.000Z', [1, 1, 1, 1, 1, 1]).filter((_, i) => i !== 3);
+    expect(findNextCheapWindow(slots, 0)).toEqual({ inCheapNow: true, endExclusive: 3 });
+  });
+  it('skips a cheap slot whose datetime does not parse', () => {
+    const slots = fromPrices([9, 1, 1]);
+    slots[1] = { ...slots[1], datetime: 'not-a-date' };
+    expect(findNextCheapWindow(slots, 0)).toEqual({
+      inCheapNow: false,
+      startIndex: 2,
+      startsIn: 30,
+      price: 1,
+    });
   });
 });
 
@@ -90,6 +131,22 @@ describe('findPeakBlock gap bridging', () => {
   it('reports endExclusive past the last slot when the peak abuts the data end', () => {
     const r = findPeakBlock(fromPrices([1, 1, 100, 100, 100, 100]));
     expect(r).toMatchObject({ startIndex: 2, endExclusive: 6 });
+  });
+  it('does not merge highs across a missing slot into a 1h peak (finding #12151)', () => {
+    // Five highs, third removed: four above-threshold slots in the array, but
+    // the third present high is 30 min after the second. Each side is 2 slots.
+    const slots = stepSlots('2026-01-15T12:00:00.000Z', [100, 100, 100, 100, 100, 1, 1, 1, 1, 1]).filter(
+      (_, i) => i !== 2,
+    );
+    expect(findPeakBlock(slots)).toBeNull();
+  });
+  it('does not bridge a ≤2-slot index gap that is more than 30 min on the clock (finding #12151)', () => {
+    // Dropping the first dip slot leaves an index gap of 1 between the high
+    // runs, which the old bridge treated as ≤30 min. The clock gap is 45 min.
+    const slots = stepSlots('2026-01-15T12:00:00.000Z', [100, 100, 1, 1, 100, 100, 1, 1, 1, 1]).filter(
+      (_, i) => i !== 2,
+    );
+    expect(findPeakBlock(slots)).toBeNull();
   });
 });
 

@@ -1,7 +1,7 @@
 // Pure cost-estimator logic: slot assembly, deadline parse, window search.
 
 import { SLOT_MS, helsinkiMinutesOfDay, helsinkiDateKey, slotsOf } from './slot-time.js';
-import { windowSums, argMin, argMax } from './calc.js';
+import { pickContiguousWindow } from './calc.js';
 
 // Drop slots whose window has already ended at nowMs, so a search over the result
 // starts at the current slot. Without this the estimator recommends windows from
@@ -68,10 +68,12 @@ export function isDeadlineDayUnavailable(slots, deadlineMin) {
   return findDeadlineSlotIndex(slots, deadlineMin) === null;
 }
 
-// Cheapest and most expensive contiguous windows of `durationHours` within the
-// deadline (if any). A deadline with no matching slot (past today's last start
-// with tomorrow unpublished, or rolled onto a day with no data) searches through
-// slots.length — remaining slots still start before it (finding #7111). endExclusive on the result is
+// Cheapest and most expensive windows of `durationHours` within the deadline
+// (if any). A window counts only when its slots are adjacent quarter-hours, so
+// a 1h recommendation cannot span a missing slot (finding #12151). A deadline
+// with no matching slot (past today's last start with tomorrow unpublished, or
+// rolled onto a day with no data) searches through slots.length — remaining
+// slots still start before it (finding #7111). endExclusive on the result is
 // the exclusive window-end slot index (start + window length), the same bound
 // convention calc.js uses — the view resolves it through slotSpanLabel, so a
 // window abutting the data end still shows its true end instant.
@@ -89,18 +91,16 @@ export function findOptimalWindow(slots, durationHours, powerKw, deadlineMin) {
     endExclusive = deadlineIdx ?? slots.length;
   }
 
-  const sums = windowSums(slots, slotCount, endExclusive);
-  if (sums.length === 0) return null;
+  const pick = pickContiguousWindow(slots, slotCount, endExclusive);
+  if (!pick) return null;
 
   const kwhPerSlot = powerKw * 0.25;
-  const minStart = argMin(sums);
-  const maxStart = argMax(sums);
-  const bestCost = sums[minStart] * kwhPerSlot;
-  const worstCost = sums[maxStart] * kwhPerSlot;
+  const bestCost = pick.minSum * kwhPerSlot;
+  const worstCost = pick.maxSum * kwhPerSlot;
 
   return {
-    best: { startIndex: minStart, endExclusive: minStart + slotCount, cost: bestCost },
-    worst: { startIndex: maxStart, endExclusive: maxStart + slotCount, cost: worstCost },
+    best: { startIndex: pick.minStart, endExclusive: pick.minStart + slotCount, cost: bestCost },
+    worst: { startIndex: pick.maxStart, endExclusive: pick.maxStart + slotCount, cost: worstCost },
     savings: worstCost - bestCost,
   };
 }

@@ -124,6 +124,39 @@ describe('insightCards', () => {
     });
   });
 
+  it('counts the next cheap window in wall-clock minutes when a slot is missing (finding #12151)', () => {
+    // Winter 14:05, inside 14:00. 14:30 was dropped. The cheap slot is 14:45:
+    // 45 min from the current slot's start, not 2 array steps × 15.
+    const slots = stepSlots('2026-01-15T12:00:00.000Z', [
+      0.3, 0.3, 0.3, 0.05, 0.05, 0.05, 0.05, 0.05, 0.4, 0.4, 0.4, 0.4,
+    ]).filter((_, i) => i !== 2);
+    const now = Date.parse('2026-01-15T12:05:00.000Z');
+    const cards = insightCards(slots, insightCurrentIndex(true, slots, now));
+    expect(cards.next).toEqual({ value: '45 min', detail: 'Alkaa 14:45 (5.00 c/kWh)' });
+  });
+
+  it('labels the cheapest 2h block by its real span, not the hole it would cross (finding #12151)', () => {
+    // The two cheap slots before the missing 14:30 make the index-8 window the
+    // minimum sum, and that window labels 14:00–16:15. The real 2h block starts
+    // at 14:45.
+    const slots = stepSlots('2026-01-15T12:00:00.000Z', [
+      0.01, 0.01, 0.01, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2,
+    ]).filter((_, i) => i !== 2);
+    expect(insightCards(slots, 0).cheap.value).toBe('14:45–16:45');
+  });
+
+  it('stops the "in a cheap window" note at the hole (finding #12151)', () => {
+    // All slots are cheap. 14:45 is missing, so the run that contains 14:00 ends
+    // at 14:45 — not at the far side of the later slots.
+    const slots = stepSlots('2026-01-15T12:00:00.000Z', [0.1, 0.1, 0.1, 0.1, 0.1, 0.1]).filter(
+      (_, i) => i !== 3,
+    );
+    expect(insightCards(slots, 0).next).toEqual({
+      value: 'Nyt!',
+      detail: 'Olet halvassa jaksossa (→ 14:45)',
+    });
+  });
+
   it('always returns a value and a detail for all three cards', () => {
     // Structural guarantee behind the "no stale card" fix: the renderer can
     // unconditionally write six fields.

@@ -6,7 +6,7 @@ Two invariants that look swappable and aren't. Both have painted the wrong thing
 
 Window bounds are exclusive everywhere and say so in the name. `windowSums`'s third argument, and the `endExclusive` field on every window from `findCheapestBlock` / `findPeakBlock` / `findNextCheapWindow` / `findOptimalWindow`, is one past the last included slot. That feeds `slotBoundaryMs` / `slotBoundaryLabel` / `slotSpanLabel` directly with no `+1` at the call site.
 
-Peak runs stay `{startIndex, endExclusive}` through collect/merge/pick too — gap is `next.startIndex - prev.endExclusive`, length is `endExclusive - startIndex`.
+Peak runs stay `{startIndex, endExclusive}` through collect/merge/pick too — gap is `next.startIndex - prev.endExclusive`, length is `endExclusive - startIndex`. A bridge of ≤2 slots also requires those slots to be adjacent quarter-hours; a missing slot is not the dip.
 
 `endIndex` used to mean *inclusive* in `calc.js` and *exclusive* in `estimator-calc.js`. Don't reintroduce a bound whose name doesn't state its side.
 
@@ -17,6 +17,12 @@ Peak runs stay `{startIndex, endExclusive}` through collect/merge/pick too — g
 - inside a window → that slot, `stale: false`
 - past the last window, or in an interior gap → most recent *past* slot, `stale: true`
 - before the first slot, or today empty → 404 (`null` from the query; the route owns the status)
+
+## Missing slots are not quarter-hours
+
+`findCheapestBlock`, `findOptimalWindow`, and `findPeakBlock` only accept a window whose slots step by exactly 15 minutes of UTC (`SLOT_MS`). An interior gap — a dropped upstream slot — makes an index window longer on the clock than the duration it claims, so that start is skipped. The finder returns null when no real window fits. `findNextCheapWindow`'s `startsIn` is wall-clock minutes between the current slot's `datetime` and the cheap slot's, not `(index delta) × 15`. The cheap-now run stops at a gap; its end label is `exclusiveEndMs` (one quarter-hour after the last included slot), not the far side of the hole.
+
+Spring-forward is not a gap: 02:45 EET and 04:00 EEST are 15 minutes apart in UTC.
 
 ## Cheap-rank polarity
 
