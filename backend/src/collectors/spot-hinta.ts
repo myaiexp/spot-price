@@ -37,14 +37,23 @@ function isValidSpotHintaSlot(slot: unknown): slot is SpotHintaSlot {
 export async function collectPrices(db: Db): Promise<{ upserted: number }> {
   const raw = await fetchUpstreamJson(SPOT_HINTA_TODAY_URL, SPOT_HINTA_SOURCE);
 
-  if (!Array.isArray(raw) || raw.length === 0) {
-    return { upserted: 0 };
+  // TodayAndDayForward is the live day, so none of these is a successful
+  // collect of zero rows. collector.ts maps the throw to exit 1 and the
+  // systemd oneshot shows as failed. An empty list is end-of-history only
+  // for the sahkotin backfill walk — a different contract.
+  if (!Array.isArray(raw)) {
+    throw new Error(`${SPOT_HINTA_SOURCE} returned a non-array payload`);
+  }
+  if (raw.length === 0) {
+    throw new Error(`${SPOT_HINTA_SOURCE} returned an empty price list`);
   }
 
   const validSlots = filterValidSlots(raw, isValidSpotHintaSlot, SPOT_HINTA_SOURCE);
 
   if (validSlots.length === 0) {
-    return { upserted: 0 };
+    throw new Error(
+      `${SPOT_HINTA_SOURCE} returned ${raw.length} price slot(s) but no valid slots`,
+    );
   }
 
   const values = validSlots.map((slot) =>

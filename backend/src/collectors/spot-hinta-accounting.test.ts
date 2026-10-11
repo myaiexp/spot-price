@@ -18,7 +18,10 @@ function makeSlots(n: number) {
   }));
 }
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 describe('collectPrices upsert accounting (audit #1310)', () => {
   it('insert-only batch: upserted equals batch size', async () => {
@@ -45,12 +48,19 @@ describe('collectPrices upsert accounting (audit #1310)', () => {
     expect(result.upserted).toBe(8);
   });
 
-  it('empty API response: upserted is 0 and the DB is never touched', async () => {
+  // TodayAndDayForward is the live day. [] is not "nothing new to write" the
+  // way an empty sahkotin chunk is end of history — it means the upstream
+  // published nothing, and exit 0 would hide that for the whole 15-min timer.
+  it('empty API response throws and the DB is never touched (finding #11901)', async () => {
     stubFetch([]);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const insertSpy = vi.fn();
     const db = { insert: insertSpy } as unknown as Db;
-    const result = await collectPrices(db);
-    expect(result.upserted).toBe(0);
+
+    await expect(collectPrices(db)).rejects.toThrow(
+      'spot-hinta.fi returned an empty price list',
+    );
     expect(insertSpy).not.toHaveBeenCalled();
+    expect(warn).not.toHaveBeenCalled();
   });
 });
