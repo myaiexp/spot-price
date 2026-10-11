@@ -4,8 +4,9 @@
 // production deps object, that a disabled Huomenna click does not switch tabs
 // (finding #7619), that an enabled click re-renders insights + chart
 // (finding #7898), that the chart-type / resolution toggles reach the same
-// injected renderChart and only it (finding #9587, finding #9927), and that
-// init() boots the estimator (finding #9927). The tomorrowTab renderer's DOM
+// injected renderChart and only it (finding #9587, finding #9927), that
+// init() boots the estimator (finding #9927), and that applyPriceBundle clears
+// refreshFailed (finding #12148). The tomorrowTab renderer's DOM
 // behaviour lives in frontend-tabs.test.ts.
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
@@ -158,6 +159,27 @@ describe('buildLoaderDeps (finding #7619)', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     noteStale();
     expect(state.refreshFailed).toBe(true);
+  });
+
+  it('applyPriceBundle writes the bundle and clears a stale refresh (finding #12148)', () => {
+    // noteStale is the only writer of refreshFailed = true. This deps method
+    // is the only writer of false — load tests inject their own copy.
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const deps = buildLoaderDeps();
+    deps.noteStale();
+    expect(state.refreshFailed).toBe(true);
+
+    const today = { slots: [{ datetime: '2026-07-18T00:00:00.000Z' }] };
+    const yesterday = { slots: [] };
+    const tomorrow = null;
+    const now = { slot: { priceWithTax: 0.05 } };
+    deps.applyPriceBundle({ today, yesterday, tomorrow, now });
+
+    expect(state.refreshFailed).toBe(false);
+    expect(state.today).toBe(today);
+    expect(state.yesterday).toBe(yesterday);
+    expect(state.tomorrow).toBe(tomorrow);
+    expect(state.now).toBe(now);
   });
 
   it('wires tomorrowTab to tabs.js renderTomorrowTab (finding #9607)', () => {

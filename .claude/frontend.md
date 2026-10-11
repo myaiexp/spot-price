@@ -12,7 +12,7 @@ Pure math is side-effect-free and DOM-free. Render modules own the DOM. `main.js
 | --- | --- |
 | `js/calc.js` | Window sums, time-contiguous cheapest/next/peak blocks, EMA, wall-clock ghost alignment |
 | `js/estimator-calc.js` | Deadline minutes parse + resolution, slot assembly, time-contiguous optimal-window search, forward-slot filtering |
-| `js/slot-time.js` | Helsinki wall-clock + datetime→slot indexing (`toDate` coercion) |
+| `js/slot-time.js` | Helsinki wall-clock ↔ epoch (DST gap/fold) + datetime→slot indexing |
 | `js/format.js` | Cents + Helsinki labels: `formatTime` is fi-FI prose (`14.30`); colon `slotLabel`/`hourLabel`/`slotBoundaryLabel`/`slotSpanLabel` for axes and window spans |
 | `js/hero-calc.js` | Cheap-rank → band/tint/copy |
 | `js/insights-calc.js` | Now-index per tab + the three card texts |
@@ -43,7 +43,7 @@ All slot indices and labels derive from each slot's `datetime` — never fixed `
 
 Window-span labels go through `slotSpanLabel` (colon form). `formatTime` is the fi-FI prose form (`14.30`) for copy like the hero's "klo" note — don't mix the two; estimator and insight cards share the colon helper so they cannot drift.
 
-Estimator deadlines are minutes-since-Helsinki-midnight (`parseDeadlineMinutes` on the `<input type="time">` value), matching `helsinkiMinutesOfDay` — not a fractional hour. `findDeadlineSlotIndex` is the first slot starting at/after the deadline *instant*: a same-day deadline past the day's last start (23:59) bounds the search at tomorrow's first slot, so loaded tomorrow prices never leak into a "today" window.
+Estimator deadlines are minutes-since-Helsinki-midnight (`parseDeadlineMinutes` on the `<input type="time">` value), matching `helsinkiMinutesOfDay` — not a fractional hour. The deadline instant is resolved once: the first slot's Helsinki day, or the next day when that clock time is already at or before the first slot. `findDeadlineSlotIndex` is the first slot starting at/after that instant, so a same-day 23:59 bounds the search at tomorrow's first slot and loaded tomorrow prices never leak into a "today" window.
 
 ## Fetch abort / supersede
 

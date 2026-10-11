@@ -1,6 +1,13 @@
 // Pure cost-estimator logic: slot assembly, deadline parse, window search.
 
-import { SLOT_MS, helsinkiMinutesOfDay, helsinkiDateKey, slotsOf } from './slot-time.js';
+import {
+  SLOT_MS,
+  helsinkiMinutesOfDay,
+  helsinkiDateKey,
+  helsinkiWallClockMs,
+  addCalendarDays,
+  slotsOf,
+} from './slot-time.js';
 import { pickContiguousWindow } from './calc.js';
 
 // Drop slots whose window has already ended at nowMs, so a search over the result
@@ -29,42 +36,43 @@ export function collectEstimatorSlots(today, tomorrow, nowMs) {
   return futureSlots([...slotsOf(today), ...slotsOf(tomorrow)], nowMs);
 }
 
-// Index of the first slot starting at/after a wall-clock deadline (minutes since
-// Helsinki midnight), as the charging window's exclusive upper bound. The deadline
-// is the *next* occurrence of that time of day: one already at/before slots[0]'s
-// time-of-day rolls to the following Helsinki day. A same-day deadline later than
-// that day's last slot start (23:59 vs a 23:45 last slot) resolves to the next
-// day's first slot, which starts after the deadline instant — without that the
+// The next occurrence of deadlineMin (minutes since Helsinki midnight) as an
+// absolute instant. A time already at or before slots[0]'s clock time is the
+// following Helsinki day: that occurrence has started, so it is not a bound on
+// a job that still has to run.
+function resolveDeadline(slots, deadlineMin) {
+  const first = slots[0].datetime;
+  const firstDay = helsinkiDateKey(first);
+  const rollsToNextDay = deadlineMin <= helsinkiMinutesOfDay(first);
+  const targetDay = rollsToNextDay ? addCalendarDays(firstDay, 1) : firstDay;
+  return { deadlineMs: helsinkiWallClockMs(targetDay, deadlineMin), rollsToNextDay };
+}
+
+// Index of the first slot starting at or after that instant — the charging
+// window's exclusive upper bound. A same-day deadline later than the day's
+// last slot start (23:59 vs a 23:45 last slot) therefore lands on the next
+// day's first slot, which starts after the deadline instant. Without that the
 // search would run into tomorrow's prices whenever they are loaded (finding
-// #9574). Assumes slots span at most two Helsinki days (today + tomorrow), which
-// collectEstimatorSlots guarantees. Returns null when no slot starts at/after the
-// deadline.
+// #9574). Assumes slots span at most two Helsinki days (today + tomorrow),
+// which collectEstimatorSlots guarantees. Returns null when no slot starts at
+// or after the deadline.
 export function findDeadlineSlotIndex(slots, deadlineMin) {
   if (!slots || slots.length === 0) return null;
-  const firstMin = helsinkiMinutesOfDay(slots[0].datetime);
-  const firstDay = helsinkiDateKey(slots[0].datetime);
-  const rollsToNextDay = deadlineMin <= firstMin;
-
+  const { deadlineMs } = resolveDeadline(slots, deadlineMin);
   for (let i = 0; i < slots.length; i++) {
-    const isNextDay = helsinkiDateKey(slots[i].datetime) !== firstDay;
-    // Same-day deadline: every earlier same-day slot started before it, so the
-    // day boundary is the bound.
-    if (isNextDay && !rollsToNextDay) return i;
-    if (isNextDay !== rollsToNextDay) continue;
-    if (helsinkiMinutesOfDay(slots[i].datetime) >= deadlineMin) return i;
+    if (Date.parse(slots[i].datetime) >= deadlineMs) return i;
   }
   return null;
 }
 
-// True when the deadline rolls to the Helsinki day *after* slots[0] and that
-// day has no matching slot — the usual case is "deadline is tomorrow morning,
-// but tomorrow's prices aren't published yet." Same-day deadlines that simply
-// fall past the last slot return false (that's a different miss).
+// True when the deadline rolls to the Helsinki day after slots[0] and no slot
+// starts at or after that instant — the usual case is "deadline is tomorrow
+// morning, but tomorrow's prices aren't published yet." Same-day deadlines
+// that simply fall past the last slot return false (that's a different miss).
 export function isDeadlineDayUnavailable(slots, deadlineMin) {
   if (deadlineMin === null || deadlineMin === undefined) return false;
   if (!slots || slots.length === 0) return false;
-  const firstMin = helsinkiMinutesOfDay(slots[0].datetime);
-  if (deadlineMin > firstMin) return false; // still on the first slot's day
+  if (!resolveDeadline(slots, deadlineMin).rollsToNextDay) return false;
   return findDeadlineSlotIndex(slots, deadlineMin) === null;
 }
 
@@ -84,10 +92,6 @@ export function findOptimalWindow(slots, durationHours, powerKw, deadlineMin) {
   let endExclusive = slots.length;
   if (deadlineMin !== null && deadlineMin !== undefined) {
     const deadlineIdx = findDeadlineSlotIndex(slots, deadlineMin);
-    // No matching slot (deadline past the last start, or rolled onto a day
-    // with no data) still leaves every remaining slot starting before the
-    // deadline — search them. Duration-too-long then returns null below, and
-    // isDeadlineDayUnavailable explains the unpublished-tomorrow case.
     endExclusive = deadlineIdx ?? slots.length;
   }
 

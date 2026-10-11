@@ -102,6 +102,26 @@ describe('updateEstimator success path and placeholders (finding #7899)', () => 
     expect(dearestSpan).toBeGreaterThan(cheapestSpan);
   });
 
+  it('paints literal euro amounts for 6 kW over 1.5 h (finding #12147)', () => {
+    // 6 slots. kWh/slot = 6 × 0.25 = 1.5. Cheap window 4×0.5+2×1 = 4 → 6.00 €;
+    // dear window 2×0.5+4×1 = 5 → 7.50 €. Dropping the power factor paints
+    // 1.00 / 1.25, and a 4-slot window paints 3.00 / 6.00.
+    state.today = {
+      slots: stepSlots('2026-07-17T17:00:00.000Z', [0.5, 0.5, 0.5, 0.5, 1, 1, 1, 1]),
+    };
+    state.tomorrow = null;
+    const { doc, els } = estimatorDoc({ power: '6', duration: '1.5', deadline: '' });
+
+    updateEstimator({ document: doc, nowMs: Date.parse('2026-07-17T17:00:00.000Z') });
+
+    const html = els.estimatorResults.innerHTML;
+    expect(html).toContain('6.00 €');
+    expect(html).toContain('7.50 €');
+    expect(html).toContain('1.50 €');
+    expect(html).toContain('20:00–21:30');
+    expect(html).toContain('20:30–22:00');
+  });
+
   it('never starts Halvin on a slot that ended exactly at now (finding #9933)', () => {
     // now = end of 20:45–21:00 (the last cheap slot). Keeping it would make
     // Halvin 20:45–21:45; the only live 1h window is 21:00–22:00.

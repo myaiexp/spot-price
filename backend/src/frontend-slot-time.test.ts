@@ -1,6 +1,6 @@
 // Tests for the frontend's pure slot/time helpers (../../frontend/js/slot-time.js):
-// Helsinki wall-clock extraction and datetime-derived slot indexing, including the
-// past-the-end boundary extrapolation that fixes the estimator's 15-min-early end.
+// Helsinki wall-clock extraction, wall-clock → epoch (DST gap and fold), and
+// datetime-derived slot indexing, including the past-the-end boundary extrapolation.
 
 import { describe, it, expect } from 'vitest';
 import {
@@ -10,6 +10,8 @@ import {
   helsinkiHourMinute,
   helsinkiMinutesOfDay,
   helsinkiDateKey,
+  addCalendarDays,
+  helsinkiWallClockMs,
   findSlotContaining,
   slotBoundaryMs,
   exclusiveEndMs,
@@ -53,6 +55,48 @@ describe('helsinkiMinutesOfDay / helsinkiDateKey', () => {
     // 22:00Z summer is already 01:00 the next Helsinki day.
     expect(helsinkiDateKey('2026-07-17T22:00:00Z')).toBe('2026-07-18');
     expect(helsinkiDateKey('2026-07-17T20:00:00Z')).toBe('2026-07-17');
+  });
+});
+
+describe('addCalendarDays', () => {
+  it('steps a YYYY-MM-DD key by whole calendar days', () => {
+    expect(addCalendarDays('2026-03-29', 1)).toBe('2026-03-30');
+    expect(addCalendarDays('2026-12-31', 1)).toBe('2027-01-01');
+    expect(addCalendarDays('2026-03-01', -1)).toBe('2026-02-28');
+  });
+});
+
+describe('helsinkiWallClockMs', () => {
+  it('converts a summer wall time with the EEST offset', () => {
+    // 07:20 EEST = 04:20Z. The +02 reading (05:20Z) is 08:20 and must lose.
+    expect(helsinkiWallClockMs('2026-07-18', 7 * 60 + 20)).toBe(Date.parse('2026-07-18T04:20:00Z'));
+  });
+
+  it('converts a winter wall time with the EET offset', () => {
+    // 07:20 EET = 05:20Z. The +03 reading (04:20Z) is 06:20 and must lose.
+    expect(helsinkiWallClockMs('2026-01-15', 7 * 60 + 20)).toBe(Date.parse('2026-01-15T05:20:00Z'));
+  });
+
+  it('picks the earlier instant when the fall-back hour repeats', () => {
+    // 2026-10-25 03:30 happens twice: 00:30Z (EEST) then 01:30Z (EET).
+    expect(helsinkiWallClockMs('2026-10-25', 3 * 60 + 30)).toBe(Date.parse('2026-10-25T00:30:00Z'));
+  });
+
+  it('maps a skipped spring-forward minute to the 04:00 transition', () => {
+    // 2026-03-29 03:00–03:59 does not exist. The first real instant at or
+    // after any of those minutes is 04:00 EEST = 01:00Z, not 04:30 (01:30Z).
+    expect(helsinkiWallClockMs('2026-03-29', 3 * 60)).toBe(Date.parse('2026-03-29T01:00:00Z'));
+    expect(helsinkiWallClockMs('2026-03-29', 3 * 60 + 30)).toBe(Date.parse('2026-03-29T01:00:00Z'));
+    expect(helsinkiWallClockMs('2026-03-29', 3 * 60 + 59)).toBe(Date.parse('2026-03-29T01:00:00Z'));
+  });
+
+  it('keeps the real minutes on either side of the spring-forward jump', () => {
+    expect(helsinkiWallClockMs('2026-03-29', 2 * 60 + 30)).toBe(Date.parse('2026-03-29T00:30:00Z'));
+    expect(helsinkiWallClockMs('2026-03-29', 4 * 60)).toBe(Date.parse('2026-03-29T01:00:00Z'));
+  });
+
+  it('rejects a minute that is not a clock time', () => {
+    expect(() => helsinkiWallClockMs('2026-07-18', 99 * 60)).toThrow(/no Helsinki instant/);
   });
 });
 

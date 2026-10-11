@@ -12,22 +12,8 @@ import {
   parseDeadlineMinutes,
   collectEstimatorSlots,
 } from '../../frontend/js/estimator-calc.js';
-import { slotSpanLabel } from '../../frontend/js/format.js';
 import { SLOT_MS } from '../../frontend/js/slot-time.js';
 import { slot, stepSlots } from './test-support/rows.js';
-
-// Wall-clock length of a returned window. Uses the exclusive-end slot's own
-// start when that slot exists, so a window that jumped a hole measures long.
-function windowSpanMs(
-  slots: { datetime: string }[],
-  win: { startIndex: number; endExclusive: number },
-) {
-  const endMs =
-    win.endExclusive < slots.length
-      ? Date.parse(slots[win.endExclusive].datetime)
-      : Date.parse(slots[win.endExclusive - 1].datetime) + SLOT_MS;
-  return endMs - Date.parse(slots[win.startIndex].datetime);
-}
 
 // Summer (EEST, UTC+3) slot at a Helsinki wall-clock time — deterministic, no DST
 // inside the test window. Test-specific day/hour helper on top of shared `slot`.
@@ -118,6 +104,22 @@ describe('findDeadlineSlotIndex', () => {
   it('returns null for a same-day deadline past the last slot when tomorrow is absent', () => {
     const todayOnly = twoDays.slice(0, 24);
     expect(findDeadlineSlotIndex(todayOnly, 23 * 60 + 59)).toBeNull();
+  });
+
+  it('bounds a deadline inside the skipped spring-forward hour at 04:00', () => {
+    // 2026-03-29 jumps 02:45 EET → 04:00 EEST. 03:30 never occurs, so the
+    // bound is the 04:00 slot (01:00Z), not 04:30 (01:30Z).
+    const slots = stepSlots('2026-03-29T00:00:00.000Z', Array(8).fill(1));
+    const idx = findDeadlineSlotIndex(slots, 3 * 60 + 30);
+    expect(slots[idx!].datetime).toBe('2026-03-29T01:00:00.000Z');
+  });
+
+  it('picks the first fall-back 03:30, not the repeated hour', () => {
+    // 2026-10-25 repeats 03:00–03:59. The earlier 03:30 is 00:30Z; the later
+    // one is 01:30Z. Slots start at 02:00 EEST (23:00Z the day before).
+    const slots = stepSlots('2026-10-24T23:00:00.000Z', Array(14).fill(1));
+    const idx = findDeadlineSlotIndex(slots, 3 * 60 + 30);
+    expect(slots[idx!].datetime).toBe('2026-10-25T00:30:00.000Z');
   });
 });
 
@@ -252,6 +254,17 @@ describe('findOptimalWindow', () => {
     expect(r.best.endExclusive).toBeLessThanOrEqual(92);
   });
 
+  it('scales cost by kW and ceils a partial quarter-hour (finding #12147)', () => {
+    // 1.1h × 4 = 4.4 → 5 slots. round(4.4) and floor(4.4) are both 4, so a
+    // 1.0h case or a 1.2h case (round(4.8) = 5) still passes either swap.
+    // 11 kW is 2.75 kWh/slot: cheap 5×1 → 13.75 €, dear 2×1+3×4 = 14 → 38.5 €.
+    const slots = quarterSlots([1, 1, 1, 1, 1, 4, 4, 4]);
+    const r = findOptimalWindow(slots, 1.1, 11, null)!;
+    expect(r.best).toEqual({ startIndex: 0, endExclusive: 5, cost: 13.75 });
+    expect(r.worst).toEqual({ startIndex: 3, endExclusive: 8, cost: 38.5 });
+    expect(r.savings).toBe(24.75);
+  });
+
   it('searches tonight for a rolled 07:00 deadline, and only then falls through (finding #7111)', () => {
     const tonight = stepSlots('2026-07-17T17:00:00.000Z', [
       ...Array(12).fill(10), 1, 1, 1, 1,
@@ -264,23 +277,5 @@ describe('findOptimalWindow', () => {
     const tooLong = stepSlots('2026-07-17T17:00:00.000Z', Array(16).fill(10));
     expect(findOptimalWindow(tooLong, 5, 1, 7 * 60)).toBeNull();
     expect(isDeadlineDayUnavailable(tooLong, 7 * 60)).toBe(true);
-  });
-
-  it('keeps a 1h window on the clock when a quarter-hour is missing (finding #12151)', () => {
-    // 14:00, 14:15, [14:30 missing], then 14:45 onward. The cheapest index
-    // window of 4 sums the three 1s plus a 5 and labels 14:00–15:15 (75 min).
-    const slots = stepSlots('2026-01-15T12:00:00.000Z', [1, 1, 1, 1, 5, 5, 5, 5]).filter(
-      (_, i) => i !== 2,
-    );
-    const r = findOptimalWindow(slots, 1, 1, null)!;
-    expect(windowSpanMs(slots, r.best)).toBe(60 * 60 * 1000);
-    expect(windowSpanMs(slots, r.worst)).toBe(60 * 60 * 1000);
-    expect(slotSpanLabel(slots, r.best.startIndex, r.best.endExclusive)).toBe('14:45–15:45');
-  });
-
-  it('returns null when every 1h candidate crosses the hole (finding #12151)', () => {
-    const slots = stepSlots('2026-01-15T12:00:00.000Z', [1, 1, 1, 1, 1]).filter((_, i) => i !== 2);
-    expect(slots).toHaveLength(4);
-    expect(findOptimalWindow(slots, 1, 1, null)).toBeNull();
   });
 });

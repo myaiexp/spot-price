@@ -1,4 +1,4 @@
-// Pure slot/time helpers: Helsinki wall-clock extraction and datetime-derived
+// Pure slot/time helpers: Helsinki wall-clock ↔ epoch and datetime-derived
 // slot indexing. Deriving indices from each slot's absolute datetime (never from
 // fixed h*4 arithmetic) is what keeps the UI aligned on 23h/25h DST days.
 
@@ -44,6 +44,41 @@ export function helsinkiMinutesOfDay(input) {
 // "tomorrow" slots when a single array spans the Helsinki midnight boundary.
 export function helsinkiDateKey(input) {
   return HELSINKI_YMD.format(toDate(input));
+}
+
+// Shift a YYYY-MM-DD key by whole calendar days. UTC date math, so stepping
+// across a 23h or 25h Helsinki day cannot land on the wrong date.
+export function addCalendarDays(dateStr, days) {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+// Epoch ms when Helsinki's wall clock reads `minutes` since midnight on
+// `dateStr`. A civil time that exists twice (fall-back 03:00–03:59) is the
+// earlier instant. One that does not exist (spring-forward 03:00–03:59) is
+// the transition instant — the first moment whose wall clock is at or after
+// that minute. Anything else (not a clock time) throws.
+export function helsinkiWallClockMs(dateStr, minutes) {
+  const hh = String(Math.floor(minutes / 60)).padStart(2, '0');
+  const mm = String(minutes % 60).padStart(2, '0');
+  const stamp = `${dateStr}T${hh}:${mm}:00`;
+  let earliest = Infinity;
+  for (const offset of [2, 3]) {
+    const ms = Date.parse(`${stamp}+0${offset}:00`);
+    if (!Number.isFinite(ms)) continue;
+    if (helsinkiDateKey(ms) !== dateStr || helsinkiMinutesOfDay(ms) !== minutes) continue;
+    if (ms < earliest) earliest = ms;
+  }
+  if (earliest !== Infinity) return earliest;
+
+  // Spring-forward skips 03:00–03:59, and that is the only real HH:MM that
+  // fails the round-trip above. Every skipped minute's first real instant is
+  // the transition itself: 04:00 EEST.
+  if (minutes >= 3 * 60 && minutes < 4 * 60) {
+    return Date.parse(`${dateStr}T04:00:00+03:00`);
+  }
+  throw new Error(`no Helsinki instant for ${dateStr} minute ${minutes}`);
 }
 
 // Index of the slot whose [start, start+duration) window contains instantMs, or
