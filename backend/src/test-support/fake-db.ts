@@ -39,9 +39,9 @@ export function makeCountingSelectDb<Row>(rows: Row[]): { db: Db; selectCount: (
 }
 
 // Db whose insert-chain (values → onConflictDoUpdate) resolves to a pg-style
-// result with the given rowCount — Postgres' ON CONFLICT DO UPDATE affected-row
-// count (inserted + updated), which equals the batch size for the whole batch.
-export function makeInsertDb(rowCount = 0): Db {
+// result with the given rowCount. Postgres reports inserted + updated as one
+// count, which need not equal the batch length, and rowCount itself may be null.
+export function makeInsertDb(rowCount: number | null = 0): Db {
   const chain = {
     values: () => chain,
     onConflictDoUpdate: () => Promise.resolve({ rowCount }),

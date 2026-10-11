@@ -1,7 +1,7 @@
-// Tests that collectPrices reports an honest upsert count (audit #1310).
-// Postgres INSERT ... ON CONFLICT DO UPDATE returns rowCount = inserted + updated,
-// so the result must expose a single `upserted` count — not a fabricated
-// inserted/updated split that always reported every affected row as an insert.
+// Tests that collectPrices reports the database affected-row count (audit #1310,
+// finding #12154). Postgres INSERT ... ON CONFLICT DO UPDATE returns one
+// rowCount (inserted + updated) and does not split them. That count is not the
+// batch length, and the result must not grow inserted/updated keys.
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { collectPrices } from './spot-hinta.js';
 import type { Db } from '../db/connection.js';
@@ -24,28 +24,21 @@ afterEach(() => {
 });
 
 describe('collectPrices upsert accounting (audit #1310)', () => {
-  it('insert-only batch: upserted equals batch size', async () => {
+  it('reports rowCount when it differs from the batch size (finding #12154)', async () => {
     stubFetch(makeSlots(10));
-    // All 10 rows new → Postgres rowCount = 10.
-    const result = await collectPrices(fakeDb(10));
-    expect(result.upserted).toBe(10);
-  });
-
-  it('update-only batch: upserted equals batch size (not mislabeled as inserts)', async () => {
-    stubFetch(makeSlots(10));
-    // All 10 rows already exist and are re-set → Postgres rowCount is still 10.
-    // The old split reported { inserted: 10, updated: 0 } here — a flat lie.
-    const result = await collectPrices(fakeDb(10));
-    expect(result.upserted).toBe(10);
+    // 10 valid slots written; the database says 7 rows were affected. A
+    // passthrough of values.length reports 10 and cannot see the difference.
+    // Postgres does not split that 7 into inserted vs updated.
+    const result = await collectPrices(fakeDb(7));
+    expect(result.upserted).toBe(7);
     expect(result).not.toHaveProperty('inserted');
     expect(result).not.toHaveProperty('updated');
   });
 
-  it('mixed insert/update batch: upserted equals batch size', async () => {
-    stubFetch(makeSlots(8));
-    // 3 inserts + 5 updates → Postgres rowCount = 8; it does not split them.
-    const result = await collectPrices(fakeDb(8));
-    expect(result.upserted).toBe(8);
+  it('treats a null rowCount as zero affected rows (finding #12154)', async () => {
+    stubFetch(makeSlots(4));
+    const result = await collectPrices(fakeDb(null));
+    expect(result.upserted).toBe(0);
   });
 
   // TodayAndDayForward is the live day. [] is not "nothing new to write" the
